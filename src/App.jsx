@@ -74,7 +74,6 @@ function UpdateNotes() {
             <li>Give your Pokémon partner a nickname.</li>
             <li>Evolution moments get a pixel-art transformation animation.</li>
             <li>The calendar week runs Sunday through Saturday.</li>
-            <li>A hidden trainer test tool can add XP for trying progression features.</li>
           </ul>
           <button className="update-notes-done" type="button" onClick={() => setOpen(false)}>BACK TO QUESTS</button>
         </section>
