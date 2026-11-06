@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import WorldBackground from './components/WorldBackground.jsx';
 import AccountGate from './components/AccountGate.jsx';
 import TaskBoard from './components/TaskBoard.jsx';
@@ -21,9 +21,10 @@ import legacy14 from './legacy/legacy-14.js?raw';
 import legacy15 from './legacy/legacy-15.js?raw';
 import legacy16 from './legacy/legacy-16.js?raw';
 import legacy17 from './legacy/legacy-17.js?raw';
+import legacy18 from './legacy/legacy-18.js?raw';
 
 const legacyScripts = [legacy01, legacy02, legacy03, legacy04, legacy05, legacy06, legacy07,
-  legacy08, legacy09, legacy10, legacy11, legacy12, legacy13, legacy14, legacy15, legacy16, legacy17];
+  legacy08, legacy09, legacy10, legacy11, legacy12, legacy13, legacy14, legacy15, legacy16, legacy17, legacy18];
 
 function PlannerHeader() {
   return (
@@ -57,6 +58,31 @@ function QuestBoardPage() {
   );
 }
 
+function UpdateNotes() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button className="update-notes-trigger" type="button" onClick={() => setOpen(true)}>UPDATE 1.0</button>
+      {open && <div className="update-notes-backdrop" role="presentation" onClick={() => setOpen(false)}>
+        <section className="update-notes-card" role="dialog" aria-modal="true" aria-labelledby="updateNotesTitle" onClick={event => event.stopPropagation()}>
+          <button className="update-notes-close" type="button" aria-label="Close update notes" onClick={() => setOpen(false)}>×</button>
+          <p className="update-notes-eyebrow">POKÉPLAN PATCH NOTES</p>
+          <h2 id="updateNotesTitle">UPDATE 1.0</h2>
+          <ul>
+            <li>Quest actions now say “Finish selected.”</li>
+            <li>Add tasks with a custom task type.</li>
+            <li>Give your Pokémon partner a nickname.</li>
+            <li>Evolution moments get a pixel-art transformation animation.</li>
+            <li>The calendar week runs Sunday through Saturday.</li>
+            <li>A hidden trainer test tool can add XP for trying progression features.</li>
+          </ul>
+          <button className="update-notes-done" type="button" onClick={() => setOpen(false)}>BACK TO QUESTS</button>
+        </section>
+      </div>}
+    </>
+  );
+}
+
 export default function App() {
   useEffect(() => {
     // Keep the established game systems intact while React owns the page/component tree.
@@ -77,6 +103,7 @@ export default function App() {
       <AccountGate />
       <QuestBoardPage />
       <AttackOverlay />
+      <UpdateNotes />
     </>
   );
 }

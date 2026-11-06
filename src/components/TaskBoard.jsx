@@ -19,13 +19,14 @@ export default function TaskBoard() {
       <div className="task-list" id="taskList" />
       <div className="bulk" id="bulkbar">
         <span id="selectedCount">0 selected</span>
-        <button className="complete" id="completeSelected" type="button">⚔ CLEAR SELECTED</button>
+        <button className="complete" id="completeSelected" type="button">⚔ FINISH SELECTED</button>
       </div>
       <form className="addrow" id="addForm">
         <input id="taskInput" placeholder="Write a new quest…" maxLength="90" aria-label="New quest" />
-        <select id="category" aria-label="Quest category">
-          <option>Study</option><option>Personal</option><option>Work</option><option>Health</option>
+        <select id="category" aria-label="Task category">
+          <option value="Study">Study</option><option value="Personal">Personal</option><option value="Work">Work</option><option value="Health">Health</option><option value="custom">Custom…</option>
         </select>
+        <input id="customCategory" placeholder="Custom type" aria-label="Custom task type" maxLength="24" hidden />
         <button className="addbtn">＋ ADD QUEST</button>
       </form>
     </section>

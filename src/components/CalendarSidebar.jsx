@@ -15,7 +15,7 @@ export function Calendar() {
         <button className="arrow" id="next" type="button" aria-label="Next period">▶</button>
       </div>
       <div className="week" aria-hidden="true">
-        <span>MO</span><span>TU</span><span>WE</span><span>TH</span><span>FR</span><span>SA</span><span>SU</span>
+        <span>SU</span><span>MO</span><span>TU</span><span>WE</span><span>TH</span><span>FR</span><span>SA</span>
       </div>
       <div className="calgrid" id="calendar" />
       <div className="cal-foot"><span>OPEN QUESTS</span><strong id="weekCount">0</strong></div>
@@ -29,7 +29,8 @@ export function PartnerCard() {
       <div className="comp-title">YOUR PARTNER</div>
       <div className="comp-row">
         <img className="comp-sprite" id="miniPokemon" alt="" />
-        <div><div className="comp-name" id="companionName" /><div className="comp-lock">Starter · bonded</div></div>
+        <div className="comp-name-wrap"><div className="comp-name" id="companionName" /><div className="comp-lock">Starter · bonded</div></div>
+        <button className="nickname-button" id="nicknamePartner" type="button" aria-label="Set partner nickname">✎</button>
         <span className="starter-badge">♥ LOCKED</span>
       </div>
       <div className="terrain-note" id="terrainNote" />
