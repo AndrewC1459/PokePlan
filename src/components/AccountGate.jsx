@@ -14,7 +14,7 @@ export default function AccountGate() {
             <label className="field">Email<input id="email" type="email" autoComplete="email" required placeholder="trainer@example.com" /></label>
             <label className="field">Password<input id="password" type="password" autoComplete="new-password" minLength="4" required placeholder="At least 4 characters" /></label>
             <div className="auth-error" id="authError" />
-            <button className="auth-submit" id="accountSubmit">CREATE ACCOUNT →</button>
+            <button className="auth-submit" id="accountSubmit" type="submit">CREATE ACCOUNT →</button>
           </form>
         </div>
         <div id="starterPanel" className="hidden">
