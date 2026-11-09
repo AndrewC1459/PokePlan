@@ -1,7 +1,4 @@
-import { useState } from 'react';
-
 export default function TaskBoard() {
-  const [customCategorySelected, setCustomCategorySelected] = useState(false);
   return (
     <section className="board">
       <div className="board-top">
@@ -26,10 +23,10 @@ export default function TaskBoard() {
       </div>
       <form className="addrow" id="addForm">
         <input id="taskInput" placeholder="Write a new quest…" maxLength="90" aria-label="New quest" />
-        <select id="category" aria-label="Task category" onChange={event => setCustomCategorySelected(event.target.value === 'custom')}>
+        <select id="category" aria-label="Task category">
           <option value="Study">Study</option><option value="Personal">Personal</option><option value="Work">Work</option><option value="Health">Health</option><option value="custom">Custom…</option>
         </select>
-        <input id="customCategory" placeholder="Type your task category…" aria-label="Custom task type" maxLength="24" autoComplete="off" hidden={!customCategorySelected} />
+        <input id="customCategory" placeholder="Type your task category…" aria-label="Custom task type" maxLength="24" autoComplete="off" hidden />
         <button className="addbtn">＋ ADD QUEST</button>
       </form>
     </section>
