@@ -59,3 +59,31 @@ style.textContent=`
 @media(max-width:600px){.update-notes-layout{grid-template-columns:1fr}.update-version-list{flex-direction:row}.update-version-list button{flex:1;padding:8px}.update-version-list strong{font-size:12px}.live-clock{font-size:14px}.topright{gap:7px}.addrow input.time-input{flex-basis:92px;width:92px}}
 `;
 document.head.appendChild(style);
+
+// Rebind sign-in after all legacy setup has completed; the account data stays in the same local store.
+(()=>{
+  const currentForm=document.querySelector('#accountForm');
+  if(!currentForm)return;
+  const form=currentForm.cloneNode(true);
+  currentForm.replaceWith(form);
+  form.addEventListener('submit',event=>{
+    event.preventDefault();
+    const email=document.querySelector('#email').value.trim().toLowerCase();
+    const password=document.querySelector('#password').value;
+    const name=document.querySelector('#trainerName').value.trim()||'Trainer';
+    const error=document.querySelector('#authError');
+    error.textContent='';
+    try{
+      const all=accounts(),key=accountKey(all,email);
+      if(authMode==='signup'){
+        if(key){error.textContent='An account already exists for this email. Choose Log in.';return}
+        all[email]={email,name,password,pokemon:null,tasks:[],selectedDate:localDateKey(new Date())};
+        if(!saveAccounts(all)){error.textContent='The browser could not save this account. Check site storage settings.';return}
+        openAccount(email);return;
+      }
+      if(!key||all[key].password!==password){error.textContent='Email or password is incorrect. Check the spelling and try again.';return}
+      if(key!==email){all[email]=all[key];delete all[key];if(!saveAccounts(all)){error.textContent='Could not update this account in browser storage. Try again.';return}}
+      openAccount(email);
+    }catch{error.textContent='The browser could not access this account. Check that site storage is enabled.'}
+  });
+})();

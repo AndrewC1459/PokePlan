@@ -4,6 +4,7 @@ import AccountGate from './components/AccountGate.jsx';
 import TaskBoard from './components/TaskBoard.jsx';
 import CalendarSidebar from './components/CalendarSidebar.jsx';
 import AttackOverlay from './components/AttackOverlay.jsx';
+import './patch-notes.css';
 import legacy01 from './legacy/legacy-01.js?raw';
 import legacy02 from './legacy/legacy-02.js?raw';
 import legacy03 from './legacy/legacy-03.js?raw';
@@ -66,6 +67,7 @@ function QuestBoardPage() {
         <div className="board-layout"><TaskBoard /><CalendarSidebar /></div>
         <div className="footnote">✦ &nbsp; YOUR PARTNER BELIEVES IN YOU &nbsp; ✦</div>
       </main>
+      <UpdateNotes />
     </div>
   );
 }
@@ -136,7 +138,6 @@ export default function App() {
       <AccountGate />
       <QuestBoardPage />
       <AttackOverlay />
-      <UpdateNotes />
     </>
   );
 }
