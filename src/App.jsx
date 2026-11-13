@@ -60,23 +60,43 @@ function QuestBoardPage() {
   );
 }
 
+// Newest first. Add a new entry at the top for each update.
+const UPDATES = [
+  { version: '1.1', notes: ['Fixed custom task bug.', 'Fixed login bug.'] },
+  {
+    version: '1.0',
+    notes: [
+      'Quest actions now say “Finish selected.”',
+      'Add tasks with a custom task type.',
+      'Give your Pokémon partner a nickname.',
+      'Evolution moments get a pixel-art transformation animation.',
+      'The calendar week runs Sunday through Saturday.',
+    ],
+  },
+];
+
 function UpdateNotes() {
   const [open, setOpen] = useState(false);
+  const [version, setVersion] = useState(UPDATES[0].version);
+  const update = UPDATES.find(u => u.version === version) || UPDATES[0];
+  const openNotes = () => { setVersion(UPDATES[0].version); setOpen(true); };
   return (
     <>
-      <button className="update-notes-trigger" type="button" onClick={() => setOpen(true)}>UPDATE 1.0</button>
+      <button className="update-notes-trigger" type="button" onClick={openNotes}>UPDATES</button>
       {open && <div className="update-notes-backdrop" role="presentation" onClick={() => setOpen(false)}>
         <section className="update-notes-card" role="dialog" aria-modal="true" aria-labelledby="updateNotesTitle" onClick={event => event.stopPropagation()}>
           <button className="update-notes-close" type="button" aria-label="Close update notes" onClick={() => setOpen(false)}>×</button>
           <p className="update-notes-eyebrow">POKÉPLAN PATCH NOTES</p>
-          <h2 id="updateNotesTitle">UPDATE 1.0</h2>
-          <ul>
-            <li>Quest actions now say “Finish selected.”</li>
-            <li>Add tasks with a custom task type.</li>
-            <li>Give your Pokémon partner a nickname.</li>
-            <li>Evolution moments get a pixel-art transformation animation.</li>
-            <li>The calendar week runs Sunday through Saturday.</li>
-          </ul>
+          <div className="update-notes-tabs" role="group" aria-label="Choose an update">
+            {UPDATES.map(u => (
+              <button key={u.version} type="button" className={u.version === update.version ? 'active' : ''}
+                aria-pressed={u.version === update.version} onClick={() => setVersion(u.version)}>
+                {u.version}
+              </button>
+            ))}
+          </div>
+          <h2 id="updateNotesTitle">UPDATE {update.version}</h2>
+          <ul>{update.notes.map(note => <li key={note}>{note}</li>)}</ul>
           <button className="update-notes-done" type="button" onClick={() => setOpen(false)}>BACK TO QUESTS</button>
         </section>
       </div>}
