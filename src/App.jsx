@@ -121,6 +121,8 @@ export default function App() {
         injected.push(script);
       }
       uninstallCloud = installCloudSync();
+      // The legacy scripts have now shown the right screen; reveal the page.
+      document.documentElement.classList.remove('booting');
     });
     return () => {
       cancelled = true;
