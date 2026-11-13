@@ -13,4 +13,12 @@ pnpm dev
 
 Create a production build with `pnpm build`; preview it with `pnpm preview`.
 
-Accounts and tasks still use browser local storage. React does not provide server-side account storage; connect a backend such as Supabase to share user data across devices.
+## Accounts (Supabase)
+
+Accounts and saves are stored in Supabase so they work in any browser. `src/cloudSync.js` handles sign-up/log-in with Supabase Auth and keeps each user's save in the `planner_saves` table; browser local storage is only a cache.
+
+- Run `supabase/schema.sql` once in the Supabase SQL Editor.
+- On Vercel, the Supabase integration provides `SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (or `..._ANON_KEY`); `vite.config.js` maps them for the browser.
+- Locally, run `vercel env pull .env.local` to get the same keys. Without a key, accounts fall back to this-browser-only storage.
+
+Accounts created before cloud saves are moved online automatically the first time their owner logs in.

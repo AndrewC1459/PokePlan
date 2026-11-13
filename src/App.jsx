@@ -4,6 +4,7 @@ import AccountGate from './components/AccountGate.jsx';
 import TaskBoard from './components/TaskBoard.jsx';
 import CalendarSidebar from './components/CalendarSidebar.jsx';
 import AttackOverlay from './components/AttackOverlay.jsx';
+import { installCloudSync, restoreSession } from './cloudSync.js';
 import legacy01 from './legacy/legacy-01.js?raw';
 import legacy02 from './legacy/legacy-02.js?raw';
 import legacy03 from './legacy/legacy-03.js?raw';
@@ -86,15 +87,26 @@ function UpdateNotes() {
 export default function App() {
   useEffect(() => {
     // Keep the established game systems intact while React owns the page/component tree.
+    // Load any signed-in cloud save first so the legacy scripts open it on start.
+    let cancelled = false;
+    let uninstallCloud = () => {};
     const injected = [];
-    for (const source of legacyScripts) {
-      const script = document.createElement('script');
-      script.dataset.pokeplanLegacy = 'true';
-      script.textContent = source;
-      document.body.appendChild(script);
-      injected.push(script);
-    }
-    return () => injected.forEach(script => script.remove());
+    restoreSession().finally(() => {
+      if (cancelled) return;
+      for (const source of legacyScripts) {
+        const script = document.createElement('script');
+        script.dataset.pokeplanLegacy = 'true';
+        script.textContent = source;
+        document.body.appendChild(script);
+        injected.push(script);
+      }
+      uninstallCloud = installCloudSync();
+    });
+    return () => {
+      cancelled = true;
+      uninstallCloud();
+      injected.forEach(script => script.remove());
+    };
   }, []);
 
   return (
