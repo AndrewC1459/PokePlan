@@ -23,9 +23,10 @@ import legacy15 from './legacy/legacy-15.js?raw';
 import legacy16 from './legacy/legacy-16.js?raw';
 import legacy17 from './legacy/legacy-17.js?raw';
 import legacy18 from './legacy/legacy-18.js?raw';
+import legacy19 from './legacy/legacy-19.js?raw';
 
 const legacyScripts = [legacy01, legacy02, legacy03, legacy04, legacy05, legacy06, legacy07,
-  legacy08, legacy09, legacy10, legacy11, legacy12, legacy13, legacy14, legacy15, legacy16, legacy17, legacy18];
+  legacy08, legacy09, legacy10, legacy11, legacy12, legacy13, legacy14, legacy15, legacy16, legacy17, legacy18, legacy19];
 
 function PlannerHeader() {
   return (
@@ -62,6 +63,14 @@ function QuestBoardPage() {
 
 // Newest first. Add a new entry at the top for each update.
 const UPDATES = [
+  {
+    version: '1.2',
+    notes: [
+      'Two new biomes for every partner: Sunny Shoreline, Thunder Plains, Scorched Dunes, Dragon Canyon, Lavender Graves, and Shadow Grotto.',
+      'More wild Pokémon live in every biome.',
+      'Up to 8 wild Pokémon roam the screen at once.',
+    ],
+  },
   { version: '1.1', notes: ['Fixed custom task bug.', 'Fixed login bug.'] },
   {
     version: '1.0',
