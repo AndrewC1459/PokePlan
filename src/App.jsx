@@ -57,7 +57,7 @@ const UPDATES = [
       'Reminders: tap 🔔 REMINDERS to get a heads-up before timed quests, plus an optional evening check-in if quests are left.',
       'Edit quests: tap a quest’s name (or ✎) to change its name, day, time, type, or how often it repeats.',
       'Your list now reads like a schedule: all-day quests first, then timed quests in order.',
-      'Forgot your password? Choose Log in, then Forgot password, and we’ll email you a reset link.',
+      'Finishing a quest no longer shows an UNDO message. Undo is still there for deleting and editing quests.',
       'Install Poképlan as an app from your browser menu (on iPhone: Share → Add to Home Screen).',
       'Behind the scenes: cleaner, faster-loading code with the same look.',
     ],

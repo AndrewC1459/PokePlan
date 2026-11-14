@@ -157,7 +157,6 @@ function logout() {
 
 function setAuthMode(mode) {
   authMode = mode;
-  $('#accountPanel').classList.toggle('login-mode', mode === 'login');
   document.querySelectorAll('[data-auth]').forEach(x => x.classList.toggle('active', x.dataset.auth === mode));
   $('#nameField').classList.toggle('hidden', mode === 'login');
   $('#password').autocomplete = mode === 'login' ? 'current-password' : 'new-password';
@@ -263,7 +262,7 @@ setInterval(() => {
 }, 30000);
 
 // ---------------------------------------------------------------------------------------------
-// Undo: the last finish/delete can be reversed from the toast or with Ctrl+Z / ⌘Z.
+// Undo: the last delete or edit can be reversed from the toast or with Ctrl+Z / ⌘Z.
 
 let undoState = null, undoTimer = 0;
 
@@ -725,7 +724,8 @@ let drawMove = () => {};
 async function animateQuests(ids) {
   const targets = ids.map(id => tasks.find(t => t.id === id)).filter(t => t && !t.done);
   if (!targets.length) return;
-  const before = snapshot();
+  // Finishing isn't undoable, and an older undo would now also roll back this finish and its XP.
+  hideUndo();
   selected.clear();
   $('#bulkbar').classList.remove('show');
   for (let i = 0; i < targets.length; i++) {
@@ -754,7 +754,6 @@ async function animateQuests(ids) {
   cancelAnimationFrame(attackRaf);
   $('#attackScreen').classList.remove('active');
   renderXP();
-  offerUndo(targets.length > 1 ? `${targets.length} quests finished` : `Finished “${targets[0].title}”`, before);
 }
 $('#completeSelected').addEventListener('click', () => animateQuests([...selected]));
 

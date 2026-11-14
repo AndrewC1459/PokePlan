@@ -80,7 +80,7 @@
 #app.app{position:relative;z-index:4}
 #app .top,#app .shell{position:relative;z-index:4}
 
-/* ==== Update 1.4: editing, reminders, password reset ==== */
+/* ==== Update 1.4: editing and reminders ==== */
 /* Quest titles open the edit dialog. */
 .task-title{display:block;max-width:100%;border:0;background:none;padding:0;color:inherit;text-align:left;cursor:pointer}
 .task-title:hover{text-decoration:underline dotted #a2957a;text-underline-offset:3px}
@@ -109,6 +109,3 @@
 .reminder-copy span{font:18px VT323,monospace;color:#5e6b55;line-height:1.1}
 .reminder-toast button{flex:none;border:0;background:#425e43;color:#fff8db;padding:8px 10px;font:8px 'Press Start 2P',monospace;line-height:1.6}
 @keyframes reminderIn{from{transform:translate(-50%,-12px);opacity:0}}
-/* Forgot password (cloud accounts only, log-in mode). */
-.forgot-link{display:none;border:0;background:none;padding:0;margin:-4px 0 8px;color:#526248;font:17px VT323,monospace;text-decoration:underline;cursor:pointer}
-.cloud-accounts #accountPanel.login-mode .forgot-link{display:inline-block}

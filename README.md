@@ -37,6 +37,4 @@ Accounts and saves are stored in Supabase so they work in any browser. `src/clou
 
 Accounts created before cloud saves are moved online automatically the first time their owner logs in.
 
-Password resets email a link back to the site. In the Supabase dashboard, under Authentication → URL Configuration, the site's address must be the Site URL or listed under Redirect URLs.
-
 Each write only replaces the cloud copy the tab last read (matched on `updated_at`). If another device saved in between, the two copies are merged quest by quest and saved again. Deleted quests are remembered for 30 days so an older copy can't bring them back. Returning to the tab loads any newer cloud copy.
