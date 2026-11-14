@@ -9,8 +9,8 @@ import * as schedule from './planner/schedule.js';
 import { mergeSaves } from './planner/merge.js';
 
 // The game systems still run as classic scripts sharing globals, loaded in file-name order.
-// legacy-01 is the core (accounts, quests, calendar, XP); later files add scenery and polish.
-const legacyScripts = Object.entries(import.meta.glob('./legacy/*.js', { query: '?raw', import: 'default', eager: true }))
+// 01-core.js holds accounts, quests, calendar and XP; later files add scenery and polish.
+const gameScripts = Object.entries(import.meta.glob('./game/*.js', { query: '?raw', import: 'default', eager: true }))
   .sort(([a], [b]) => a.localeCompare(b))
   .map(([path, source]) => ({ name: path.split('/').pop(), source }));
 
@@ -21,6 +21,7 @@ function PlannerHeader() {
       <div className="topright">
         <span id="todayLabel" className="date-mini" />
         <button className="name-edit" type="button">EDIT NAME</button>
+        <button className="header-button" id="remindersButton" type="button" aria-label="Reminders">🔔<span className="header-label"> REMINDERS</span></button>
         <button className="logout" id="logout" type="button">LOG OUT ↗</button>
       </div>
     </header>
@@ -50,6 +51,17 @@ function QuestBoardPage() {
 
 // Newest first. Add a new entry at the top for each update.
 const UPDATES = [
+  {
+    version: '1.4',
+    notes: [
+      'Reminders: tap 🔔 REMINDERS to get a heads-up before timed quests, plus an optional evening check-in if quests are left.',
+      'Edit quests: tap a quest’s name (or ✎) to change its name, day, time, type, or how often it repeats.',
+      'Your list now reads like a schedule: all-day quests first, then timed quests in order.',
+      'Forgot your password? Choose Log in, then Forgot password, and we’ll email you a reset link.',
+      'Install Poképlan as an app from your browser menu (on iPhone: Share → Add to Home Screen).',
+      'Behind the scenes: cleaner, faster-loading code with the same look.',
+    ],
+  },
   {
     version: '1.3',
     notes: [
@@ -116,14 +128,14 @@ function UpdateNotes() {
 export default function App() {
   useEffect(() => {
     // Keep the established game systems intact while React owns the page/component tree.
-    // Load any signed-in cloud save first so the legacy scripts open it on start.
+    // Load any signed-in cloud save first so the game scripts open it on start.
     let cancelled = false;
     let uninstallCloud = () => {};
     const injected = [];
     restoreSession().finally(() => {
       if (cancelled) return;
       window.PlannerLogic = { ...schedule, mergeSaves };
-      for (const { name, source } of legacyScripts) {
+      for (const { name, source } of gameScripts) {
         const script = document.createElement('script');
         script.dataset.pokeplanLegacy = 'true';
         // Name each script so errors and stack traces point at the right file.
@@ -150,6 +162,8 @@ export default function App() {
       <AccountGate />
       <QuestBoardPage />
       <AttackOverlay />
+      {/* Wildlife sprites roam here (filled by the habitat scripts). */}
+      <div id="ambientLayer" aria-hidden="true" />
     </>
   );
 }

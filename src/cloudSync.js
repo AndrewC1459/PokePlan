@@ -1,12 +1,12 @@
 // Cloud accounts for Poképlan.
 //
-// The legacy scripts read and write every account through `accounts()` /
+// The game scripts (src/game) read and write every account through `accounts()` /
 // `saveAccounts()` backed by localStorage. Here localStorage becomes a cache:
 // Supabase Auth handles sign-up/log-in, and each user's save lives in the
 // `planner_saves` table (see supabase/schema.sql), so it follows them to any browser.
 //
 // Saves never blindly overwrite: each write only replaces the cloud copy this tab last saw. If
-// another device saved first, the two copies are merged (mergeRemoteSave in legacy-01) and saved
+// another device saved first, the two copies are merged (mergeRemoteSave in src/game/01-core.js) and saved
 // again. Coming back to the tab pulls any newer cloud copy.
 import { createClient } from '@supabase/supabase-js';
 import { fetchSave, pushSave, sameStamp } from './planner/cloudSave.js';
@@ -26,6 +26,14 @@ if (!supabase) console.warn('Poképlan: Supabase key missing, accounts are saved
 let currentUserId = null;
 let currentEmail = null;
 let lastStamp = null; // updated_at of the cloud copy this tab last read or wrote
+
+// Arriving from a password-reset email: Supabase signs the user in from the link and reports
+// PASSWORD_RECOVERY. They choose a new password before the planner opens.
+// The link itself says so (type=recovery); Supabase's event only fires after start-up has moved on.
+const linkParams = new URLSearchParams(location.hash.slice(1));
+let recovering = linkParams.get('type') === 'recovery' && linkParams.has('access_token');
+const linkError = linkParams.get('error_description');
+supabase?.auth.onAuthStateChange(event => { if (event === 'PASSWORD_RECOVERY') recovering = true; });
 
 function readLocal() {
   try {
@@ -65,7 +73,7 @@ function cacheRecord(record, email) {
   writeLocal(all);
 }
 
-// Fetch this user's cloud save (creating it on first login) and hand it to the legacy scripts.
+// Fetch this user's cloud save (creating it on first login) and hand it to the game scripts.
 async function loadSave(user, name) {
   const email = user.email.trim().toLowerCase();
   const row = await fetchSave(supabase, user.id);
@@ -104,6 +112,7 @@ function friendlyError(err) {
   if (code === 'invalid_credentials') return 'Email or password is incorrect. Check the spelling and try again.';
   if (code === 'email_not_confirmed') return 'Please confirm your email first. Check your inbox for the link.';
   if (code === 'user_already_exists') return 'An account already exists for this email. Choose Log in.';
+  if (code === 'same_password') return 'Choose a password different from your old one.';
   if (code === 'weak_password' || /password.*(6|characters)/i.test(message)) return 'Passwords need at least 6 characters.';
   if (code.startsWith('over_') || err?.status === 429) return 'Too many attempts. Wait a few minutes and try again.';
   if (code === '42P01' || code === 'PGRST205') return 'Cloud saves are not set up yet (the planner_saves table is missing).';
@@ -111,11 +120,12 @@ function friendlyError(err) {
   return message || 'Something went wrong. Please try again.';
 }
 
-// Before the legacy scripts run: reopen a signed-in user's cloud save, if any.
+// Before the game scripts run: reopen a signed-in user's cloud save, if any.
 export async function restoreSession() {
   if (!supabase) return;
   try {
     const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user && recovering) { localStorage.removeItem(SESSION_KEY); return; }
     if (session?.user) { await loadSave(session.user); return; }
   } catch (err) {
     console.error('Poképlan: could not load cloud save', err);
@@ -124,9 +134,27 @@ export async function restoreSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
-// After the legacy scripts run: route log-in, sign-up, saving and log-out through Supabase.
+function showResetPanel() {
+  // Drop the token details from the address bar so a refresh doesn't reuse the link.
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  document.getElementById('authWrap')?.classList.remove('hidden');
+  document.getElementById('accountPanel')?.classList.add('hidden');
+  document.getElementById('resetPanel')?.classList.remove('hidden');
+  document.getElementById('newPassword')?.focus();
+}
+
+// After the game scripts run: route log-in, sign-up, saving and log-out through Supabase.
 export function installCloudSync() {
   if (!supabase) return () => {};
+  document.documentElement.classList.add('cloud-accounts');
+  if (recovering) showResetPanel();
+  else if (linkError) {
+    // An expired or already-used email link.
+    history.replaceState(null, '', location.pathname + location.search);
+    document.querySelector('[data-auth="login"]')?.click();
+    const box = document.getElementById('authError');
+    if (box) box.textContent = 'That email link has expired or was already used. Choose Forgot password to get a new one.';
+  }
   const originalSave = window.saveAccounts;
   const originalLogout = window.logout;
   let timer = null;
@@ -218,6 +246,7 @@ export function installCloudSync() {
   };
 
   async function onSubmit(event) {
+    if (event.target?.id === 'resetForm') return onResetSubmit(event);
     const form = document.getElementById('accountForm');
     if (!form || event.target !== form) return;
     // Replace the browser-only login handlers entirely.
@@ -268,6 +297,60 @@ export function installCloudSync() {
     }
   }
 
+  // "Forgot password?": email a reset link that brings the trainer back to this page.
+  async function onForgot() {
+    const email = document.getElementById('email').value.trim().toLowerCase();
+    const say = text => { document.getElementById('authError').textContent = text; };
+    if (!email || !email.includes('@')) {
+      say('Type your email above first, then choose Forgot password.');
+      document.getElementById('email').focus();
+      return;
+    }
+    if (busy) return;
+    busy = true;
+    say('Sending a reset link…');
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+      if (error) throw error;
+      say('If that email has an account, a reset link is on its way. Open it on this device to choose a new password.');
+    } catch (err) {
+      console.error('Poképlan: reset email failed', err);
+      say(friendlyError(err));
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function onResetSubmit(event) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (busy) return;
+    const password = document.getElementById('newPassword').value;
+    const say = text => { document.getElementById('resetError').textContent = text; };
+    const submit = document.getElementById('resetSubmit');
+    busy = true;
+    submit.disabled = true;
+    say('');
+    try {
+      const { data, error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      recovering = false;
+      document.getElementById('resetPanel').classList.add('hidden');
+      document.getElementById('accountPanel').classList.remove('hidden');
+      document.getElementById('resetForm').reset();
+      window.openAccount(await loadSave(data.user));
+    } catch (err) {
+      console.error('Poképlan: password update failed', err);
+      say(friendlyError(err));
+    } finally {
+      busy = false;
+      submit.disabled = false;
+    }
+  }
+
+  const forgotButton = document.getElementById('forgotPassword');
+  forgotButton?.addEventListener('click', onForgot);
+
   const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); else pull(); };
   document.addEventListener('submit', onSubmit, true);
   document.addEventListener('visibilitychange', onVisibility);
@@ -279,6 +362,7 @@ export function installCloudSync() {
     document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('pagehide', flush);
     window.removeEventListener('focus', pull);
+    forgotButton?.removeEventListener('click', onForgot);
     window.saveAccounts = originalSave;
     window.logout = originalLogout;
   };

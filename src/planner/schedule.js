@@ -141,6 +141,57 @@ export function rollover({ tasks = [], routines = [], deleted = {} }, today, now
   };
 }
 
+// Minutes after midnight for a quest's time, or null for all-day quests.
+// Accepts "HH:MM" and the 12-hour text older saves stored ("9:30 AM").
+export function taskMinutes(task) {
+  const value = task?.allDay ? '' : String(task?.time || task?.startTime || '').trim();
+  if (!value) return null;
+  const m = value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!m) return null;
+  let h = Number(m[1]) % 24;
+  if (m[3]) h = (h % 12) + (m[3].toUpperCase() === 'PM' ? 12 : 0);
+  return h * 60 + Number(m[2]);
+}
+
+// A day's list reads like a schedule: all-day quests first (newest first, as added), then timed
+// quests from earliest to latest. Stable, so equal times keep their order.
+export function sortForDay(tasks) {
+  return tasks
+    .map((task, index) => ({ task, index, at: taskMinutes(task) }))
+    .sort((a, b) => (a.at ?? -1) - (b.at ?? -1) || a.index - b.index)
+    .map(x => x.task);
+}
+
+export const REMINDER_LEADS = { 0: 'At the start time', 5: '5 minutes before', 10: '10 minutes before', 15: '15 minutes before', 30: '30 minutes before', 60: '1 hour before' };
+export const NUDGE_TIMES = { '18:00': '6:00 PM', '20:00': '8:00 PM', '21:00': '9:00 PM' };
+// A reminder still goes out if the tab was asleep, as long as it is no later than this.
+export const REMINDER_GRACE_MINUTES = 10;
+
+// Which reminders should go out now. `prefs` = { lead: minutes | null (off), nudge: 'HH:MM' | null }.
+// `sent` holds keys already delivered on this device; the key includes the time, so moving a quest
+// re-arms its reminder. Returns [{ key, kind: 'quest' | 'nudge', task?, count? }].
+export function dueReminders(tasks, prefs, today, nowMinutes, sent = {}) {
+  const due = [];
+  const open = tasks.filter(t => t.date === today && !t.done);
+  const lead = prefs?.lead;
+  if (lead !== null && lead !== undefined && REMINDER_LEADS[lead] !== undefined) {
+    for (const task of open) {
+      const at = taskMinutes(task);
+      if (at === null) continue;
+      const remindAt = at - Number(lead);
+      const key = `quest:${task.id}@${today}@${at}`;
+      if (sent[key] || nowMinutes < remindAt || nowMinutes - remindAt > REMINDER_GRACE_MINUTES) continue;
+      due.push({ key, kind: 'quest', task });
+    }
+  }
+  const nudge = prefs?.nudge && NUDGE_TIMES[prefs.nudge] ? taskMinutes({ time: prefs.nudge }) : null;
+  const nudgeKey = `nudge:${today}`;
+  if (nudge !== null && open.length && !sent[nudgeKey] && nowMinutes >= nudge && nowMinutes - nudge <= 60) {
+    due.push({ key: nudgeKey, kind: 'nudge', count: open.length });
+  }
+  return due;
+}
+
 // Does `key` have anything on it? Used for calendar dots; counts future repeats too.
 export function dayHasQuests(tasks, routines, key, today) {
   if (tasks.some(t => t.date === key)) return true;

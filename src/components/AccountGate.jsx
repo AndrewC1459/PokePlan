@@ -14,8 +14,18 @@ export default function AccountGate() {
             <label className="field">Email<input id="email" type="email" autoComplete="email" required placeholder="trainer@example.com" /></label>
             <label className="field">Password<input id="password" type="password" autoComplete="new-password" minLength="6" required placeholder="At least 6 characters" />
               <button className="show-password" id="showPassword" type="button" aria-label="Show password">SHOW</button></label>
-            <div className="auth-error" id="authError" />
+            <button className="forgot-link" id="forgotPassword" type="button">Forgot password?</button>
+            <div className="auth-error" id="authError" aria-live="polite" />
             <button className="auth-submit" id="accountSubmit" type="submit">CREATE ACCOUNT →</button>
+          </form>
+        </div>
+        <div id="resetPanel" className="hidden">
+          <h1>NEW PASSWORD</h1>
+          <p>Choose a new password for your account.</p>
+          <form id="resetForm">
+            <label className="field">New password<input id="newPassword" type="password" autoComplete="new-password" minLength="6" required placeholder="At least 6 characters" /></label>
+            <div className="auth-error" id="resetError" aria-live="polite" />
+            <button className="auth-submit" id="resetSubmit" type="submit">SAVE PASSWORD →</button>
           </form>
         </div>
         <div id="starterPanel" className="hidden">

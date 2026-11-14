@@ -1,11 +1,8 @@
-
 // Close-range physical moves lunge into the target and resolve with distinct pixel impacts.
 (()=>{
   const projectileDraw=drawMove,physicalMoves=new Set(['FIRE CLAW','FLAME CHARGE','VOLT TACKLE','LICK','SHADOW SNEAK']);
   const stage=$('#attackStage'),attacker=$('#attacker');
-  const style=document.createElement('style');
-  style.textContent=`#attackStage.physical-attack #attacker{animation:none!important;transform:translateX(var(--lunge-x,0px)) scaleX(-1) scale(var(--attacker-scale,.82));transform-origin:center bottom;filter:drop-shadow(0 5px 0 #0c1623) brightness(var(--attacker-brightness,1))}#attackStage.physical-attack #attackCanvas{z-index:1}`;
-  document.head.appendChild(style);
+  
   function pixelLine(ctx,x1,y1,x2,y2,color,size,grid){const length=Math.max(Math.abs(x2-x1),Math.abs(y2-y1)),steps=Math.max(1,Math.ceil(length/grid)),block=Math.max(grid,Math.round(size/grid)*grid);ctx.fillStyle=color;for(let i=0;i<=steps;i++){const f=i/steps;ctx.fillRect(Math.round((x1+(x2-x1)*f)/grid)*grid,Math.round((y1+(y2-y1)*f)/grid)*grid,block,block)}}
   function physicalFrame(t,type,move){
     const box=stage.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2),cw=Math.round(box.width*dpr),ch=Math.round(box.height*dpr);

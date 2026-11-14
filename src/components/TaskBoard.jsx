@@ -45,6 +45,11 @@ export default function TaskBoard() {
           <input id="customCategory" placeholder="Your task type…" aria-label="Custom task type" maxLength="24" autoComplete="off" hidden />
         </div>
       </form>
+      <div className="reminder-toast" id="reminderToast" role="alert" hidden>
+        <span className="reminder-bell" aria-hidden="true">⏰</span>
+        <div className="reminder-copy"><b id="reminderTitle" /><span id="reminderBody" /></div>
+        <button id="reminderDismiss" type="button">GOT IT</button>
+      </div>
       <div className="undo-toast" id="undoToast" role="status" aria-live="polite" hidden>
         <span id="undoMessage" />
         <button id="undoButton" type="button">UNDO</button>

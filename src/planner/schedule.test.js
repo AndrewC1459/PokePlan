@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, dayHasQuests, fillRoutineDay, occursOn, rollover, routineTaskId, TOMBSTONE_DAYS } from './schedule.js';
+import { addDays, dayHasQuests, dueReminders, fillRoutineDay, occursOn, rollover, routineTaskId, sortForDay, taskMinutes, TOMBSTONE_DAYS } from './schedule.js';
 
 const routine = (repeat, start = '2026-11-02', extra = {}) => ({
   id: 'r1', title: 'Stretch', category: 'Health', allDay: true, time: '', repeat, start, skip: [], ...extra,
@@ -118,6 +118,59 @@ describe('rollover', () => {
   it('reports no change when there is nothing to do', () => {
     const out = rollover({ tasks: [{ id: 'c', date: today, done: false }] }, today, now);
     expect(out.changed).toBe(false);
+  });
+});
+
+describe('taskMinutes / sortForDay', () => {
+  it('reads 24-hour and older 12-hour times', () => {
+    expect(taskMinutes({ time: '09:30' })).toBe(570);
+    expect(taskMinutes({ time: '9:30 AM' })).toBe(570);
+    expect(taskMinutes({ time: '12:15 AM' })).toBe(15);
+    expect(taskMinutes({ time: '12:15 PM' })).toBe(735);
+    expect(taskMinutes({ time: '4:00 PM' })).toBe(960);
+    expect(taskMinutes({ allDay: true, time: '09:00' })).toBeNull();
+    expect(taskMinutes({ time: '' })).toBeNull();
+    expect(taskMinutes({ time: 'soon' })).toBeNull();
+  });
+  it('puts all-day quests first, then timed ones by time, keeping ties in order', () => {
+    const list = [
+      { id: 'late', time: '18:00' }, { id: 'any1', allDay: true }, { id: 'early', time: '07:15' },
+      { id: 'any2', time: '' }, { id: 'early2', time: '7:15 AM' },
+    ];
+    expect(sortForDay(list).map(t => t.id)).toEqual(['any1', 'any2', 'early', 'early2', 'late']);
+  });
+});
+
+describe('dueReminders', () => {
+  const today = '2026-11-13';
+  const quest = (id, time, extra = {}) => ({ id, title: id, date: today, time, done: false, ...extra });
+  const tasks = [quest('gym', '18:00'), quest('call', '09:00', { done: true }), quest('walk', ''), quest('tmrw', '18:00', { date: '2026-11-14' })];
+
+  it('reminds `lead` minutes before open timed quests today', () => {
+    expect(dueReminders(tasks, { lead: 10 }, today, 17 * 60 + 49)).toEqual([]);
+    const due = dueReminders(tasks, { lead: 10 }, today, 17 * 60 + 50);
+    expect(due.map(d => d.task.id)).toEqual(['gym']);
+    expect(due[0].key).toBe(`quest:gym@${today}@1080`);
+  });
+  it('still reminds a little late, but not long after', () => {
+    expect(dueReminders(tasks, { lead: 0 }, today, 18 * 60 + 10)).toHaveLength(1);
+    expect(dueReminders(tasks, { lead: 0 }, today, 18 * 60 + 11)).toHaveLength(0);
+  });
+  it('does not repeat a reminder already sent, unless the time changed', () => {
+    const sent = { [`quest:gym@${today}@1080`]: 1 };
+    expect(dueReminders(tasks, { lead: 0 }, today, 18 * 60, sent)).toHaveLength(0);
+    expect(dueReminders([quest('gym', '18:30')], { lead: 0 }, today, 18 * 60 + 30, sent)).toHaveLength(1);
+  });
+  it('sends nothing when reminders are off', () => {
+    expect(dueReminders(tasks, { lead: null, nudge: null }, today, 18 * 60)).toEqual([]);
+    expect(dueReminders(tasks, {}, today, 18 * 60)).toEqual([]);
+  });
+  it('sends one evening check-in while quests are left', () => {
+    const due = dueReminders(tasks, { lead: null, nudge: '20:00' }, today, 20 * 60 + 5);
+    expect(due).toEqual([{ key: `nudge:${today}`, kind: 'nudge', count: 2 }]);
+    expect(dueReminders(tasks, { nudge: '20:00' }, today, 20 * 60 + 5, { [`nudge:${today}`]: 1 })).toEqual([]);
+    expect(dueReminders(tasks, { nudge: '20:00' }, today, 19 * 60 + 59)).toEqual([]);
+    expect(dueReminders([quest('a', '', { done: true })], { nudge: '20:00' }, today, 20 * 60)).toEqual([]);
   });
 });
 

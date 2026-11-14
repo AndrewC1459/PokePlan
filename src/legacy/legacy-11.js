@@ -1,2 +1,0 @@
-// Pin the terrain canvas to the full viewport behind everything else.
-world.style.position='fixed';world.style.left='0';world.style.top='0';world.style.width='100vw';world.style.height='100vh';world.style.zIndex='0';document.querySelector('.world-tint').style.zIndex='1';document.querySelector('.app').style.position='relative';document.querySelector('.app').style.zIndex='4';ambientLayer.style.zIndex='2';

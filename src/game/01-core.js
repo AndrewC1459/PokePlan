@@ -99,6 +99,7 @@ function showApp() {
   showDate();
   renderPokemon();
   renderTasks();
+  checkReminders();
 }
 
 // Re-read the signed-in record from storage, e.g. after a newer cloud save arrives.
@@ -156,6 +157,7 @@ function logout() {
 
 function setAuthMode(mode) {
   authMode = mode;
+  $('#accountPanel').classList.toggle('login-mode', mode === 'login');
   document.querySelectorAll('[data-auth]').forEach(x => x.classList.toggle('active', x.dataset.auth === mode));
   $('#nameField').classList.toggle('hidden', mode === 'login');
   $('#password').autocomplete = mode === 'login' ? 'current-password' : 'new-password';
@@ -336,12 +338,13 @@ function taskRow(t) {
   row.innerHTML = `${t.done
     ? '<span class="done-mark" aria-label="Completed">✓</span>'
     : `<input class="check" type="checkbox" aria-label="Select ${escapeHtml(t.title)}" ${selected.has(t.id) ? 'checked' : ''}>`}
-    <div class="task-copy"><div class="task-title">${escapeHtml(t.title)}</div>
+    <div class="task-copy"><button class="task-title" type="button" title="Edit quest">${escapeHtml(t.title)}</button>
     <div class="task-meta"><span class="tag ${escapeHtml(category.toLowerCase())}">${escapeHtml(category)}</span>
     <span class="time-badge">${when}</span>
     ${routine ? `<span class="repeat-badge" title="Repeating quest">↻ ${escapeHtml(L.REPEATS[routine.repeat].toUpperCase())}</span>` : ''}
     ${t.carriedFrom && !t.done ? '<span class="carry-badge">CARRIED OVER</span>' : ''}</div></div>
     <div class="task-right"><span class="priority">${t.done ? 'FINISHED' : ''}</span>
+    <button class="edit" type="button" title="Edit" aria-label="Edit ${escapeHtml(t.title)}">✎</button>
     <button class="delete" type="button" title="Delete" aria-label="Delete ${escapeHtml(t.title)}">×</button></div>`;
   return row;
 }
@@ -349,7 +352,7 @@ function taskRow(t) {
 function renderTasks() {
   if (!user) return;
   fillSelectedDay();
-  const day = tasks.filter(t => t.date === selectedDate);
+  const day = L.sortForDay(tasks.filter(t => t.date === selectedDate));
   const active = day.filter(t => !t.done), done = day.filter(t => t.done), list = $('#taskList');
   const groups = filter === 'open' ? [['', active]] : filter === 'done' ? [['', done]] : [['TO DO', active], ['DONE', done]];
   list.innerHTML = '';
@@ -383,9 +386,12 @@ $('#taskList').addEventListener('change', e => {
 });
 
 $('#taskList').addEventListener('click', e => {
-  const id = e.target.closest('.delete') && e.target.closest('.task')?.dataset.id;
+  const button = e.target.closest('.delete, .edit, .task-title');
+  const id = button && e.target.closest('.task')?.dataset.id;
   const task = id && tasks.find(t => t.id === id);
-  if (task) deleteTask(task);
+  if (!task) return;
+  if (button.matches('.delete')) deleteTask(task);
+  else editTask(task);
 });
 
 function removeTask(task) {
@@ -433,6 +439,87 @@ function stopRoutine(task, routine) {
   persist();
   renderTasks();
   offerUndo(`“${task.title}” no longer repeats`, before);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Editing a quest. For a repeating quest, changes apply to the series and its open copies.
+
+const CATEGORIES = ['Study', 'Personal', 'Work', 'Health'];
+const toTimeInput = minutes => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+function editTask(task) {
+  const routine = task.routineId && user.routines.find(r => r.id === task.routineId);
+  const source = routine || task;
+  const minutes = L.taskMinutes(source);
+  const category = source.category || 'Personal';
+  const dialog = showAccountDialog({
+    title: 'Edit quest',
+    message: routine ? 'Changes apply to every repeat of this quest.' : '',
+    content: `<div class="quest-edit">
+      <label for="editTitle">QUEST<input id="editTitle" maxlength="90" autocomplete="off"></label>
+      ${routine
+        ? `<label for="editRepeat">REPEATS<select id="editRepeat">${Object.entries(L.REPEATS).map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}</select></label>`
+        : `<label for="editDate">DAY<input id="editDate" type="date" min="${todayKey()}"></label>`}
+      <label for="editTiming">TIME<span class="quest-edit-row"><select id="editTiming"><option value="allDay">All day</option><option value="time">At a time</option></select><input id="editTime" type="time" aria-label="Quest time"></span></label>
+      <label for="editCategory">TYPE<span class="quest-edit-row"><select id="editCategory">${CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}<option value="custom">Custom…</option></select><input id="editCustom" maxlength="24" placeholder="Your task type…" aria-label="Custom task type"></span></label>
+    </div>`,
+    actions: [
+      { label: 'SAVE', run: shade => saveEdit(shade, task, routine) },
+      { label: 'CANCEL', secondary: true, run: closeAccountDialog },
+    ],
+  });
+  const field = id => dialog.querySelector('#' + id);
+  field('editTitle').value = task.title;
+  if (routine) field('editRepeat').value = routine.repeat;
+  else field('editDate').value = task.date;
+  field('editTiming').value = minutes === null ? 'allDay' : 'time';
+  field('editTime').value = toTimeInput(minutes ?? 540);
+  field('editCategory').value = CATEGORIES.includes(category) ? category : 'custom';
+  field('editCustom').value = CATEGORIES.includes(category) ? '' : category;
+  const sync = () => {
+    field('editTime').hidden = field('editTiming').value === 'allDay';
+    field('editCustom').hidden = field('editCategory').value !== 'custom';
+  };
+  field('editTiming').addEventListener('change', sync);
+  field('editCategory').addEventListener('change', () => { sync(); if (!field('editCustom').hidden) field('editCustom').focus(); });
+  dialog.querySelector('.quest-edit').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') saveEdit(dialog, task, routine); });
+  sync();
+  field('editTitle').focus();
+  field('editTitle').select();
+}
+
+function saveEdit(shade, task, routine) {
+  const field = id => shade.querySelector('#' + id), say = text => { shade.querySelector('.account-dialog-error').textContent = text; };
+  const title = field('editTitle').value.trim();
+  const category = field('editCategory').value === 'custom' ? field('editCustom').value.trim() : field('editCategory').value;
+  const allDay = field('editTiming').value === 'allDay', time = allDay ? '' : field('editTime').value;
+  if (!title) return say('Give the quest a name.');
+  if (!category) return say('Enter a task type.');
+  if (!allDay && !time) return say('Pick a time, or choose All day.');
+  const before = snapshot(), now = Date.now(), fields = { title, category, allDay, time, updatedAt: now };
+
+  if (routine) {
+    const updated = { ...routine, ...fields, repeat: field('editRepeat').value };
+    user.routines = user.routines.map(r => (r.id === routine.id ? updated : r));
+    // Open copies from today on follow the new details; ones that no longer fall on a repeat day go.
+    const today = todayKey();
+    tasks = tasks
+      .filter(t => t.routineId !== routine.id || t.done || t.date < today || L.occursOn(updated, t.date))
+      .map(t => (t.routineId === routine.id && !t.done && t.date >= today ? { ...t, ...fields } : t));
+    if (task.done) tasks = tasks.map(t => (t.id === task.id ? { ...t, title, category } : t));
+  } else {
+    const date = field('editDate').value || task.date;
+    tasks = tasks.map(t => {
+      if (t.id !== task.id) return t;
+      const next = { ...t, ...fields, date };
+      if (date !== task.date) delete next.carriedFrom;
+      return next;
+    });
+  }
+  closeAccountDialog();
+  persist();
+  renderTasks();
+  offerUndo(`Edited “${title}”`, before);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -610,7 +697,8 @@ function renderXP() {
 
 const world = $('#world'), wctx = world.getContext('2d');
 let drawWorld = () => {};
-let drawResidents = () => {}; // wildlife layer; the scenery scripts assign the real one
+const ambientLayer = $('#ambientLayer');
+let drawResidents = () => {}; // fills ambientLayer with wildlife; the habitat scripts assign the real one
 
 function resizeWorld() {
   const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -699,6 +787,171 @@ function showAccountDialog({ title, message, content = '', actions = [] }) {
   return shade;
 }
 addEventListener('keydown', e => { if (e.key === 'Escape') closeAccountDialog(); });
+
+$('.name-edit').addEventListener('click', () => {
+  if (!user) return;
+  const dialog = showAccountDialog({
+    title: 'Edit trainer name',
+    message: 'Choose the name that appears on your quest board.',
+    content: '<label for="newTrainerName">TRAINER NAME<input id="newTrainerName" maxlength="20" autocomplete="nickname"></label>',
+    actions: [
+      {
+        label: 'SAVE NAME',
+        run: shade => {
+          const input = shade.querySelector('#newTrainerName'), value = input.value.trim(), error = shade.querySelector('.account-dialog-error');
+          if (!value) { error.textContent = 'Enter a name before saving.'; input.focus(); return; }
+          user.name = value;
+          if (!persist()) { error.textContent = 'Could not save the name in this browser.'; return; }
+          $('#trainerLabel').textContent = value.toUpperCase();
+          closeAccountDialog();
+        },
+      },
+      { label: 'CANCEL', secondary: true, run: closeAccountDialog },
+    ],
+  });
+  const input = dialog.querySelector('#newTrainerName');
+  input.value = user.name || '';
+  input.focus();
+  input.select();
+});
+
+$('#logout').addEventListener('click', () => showAccountDialog({
+  title: 'Log out?',
+  message: 'Are you sure you want to log out? Your quests and partner progress are saved.',
+  actions: [
+    { label: 'LOG OUT', run: () => { closeAccountDialog(); logout(); } },
+    { label: 'STAY HERE', secondary: true, run: closeAccountDialog },
+  ],
+}));
+
+// ---------------------------------------------------------------------------------------------
+// Reminders. Settings (how early, evening check-in) are saved with the trainer; notification
+// permission and the "already reminded" log belong to each device. Reminders go out while
+// Poképlan is open, in any tab or as an installed app: as a system notification when the page is
+// hidden and notifications are allowed, otherwise as a banner on the board.
+
+const remindedKey = 'pokeplan.reminded.v1';
+const notificationsSupported = 'Notification' in window;
+let reminderTimer = 0;
+
+function reminderPrefs() {
+  const r = user?.reminders || {};
+  return { lead: L.REMINDER_LEADS[r.lead] === undefined ? null : Number(r.lead), nudge: L.NUDGE_TIMES[r.nudge] ? r.nudge : null };
+}
+
+function readReminded() {
+  try {
+    return JSON.parse(localStorage.getItem(remindedKey) || '{}') || {};
+  } catch {
+    return {};
+  }
+}
+
+function writeReminded(sent) {
+  const cutoff = Date.now() - 2 * 86400000;
+  for (const [key, at] of Object.entries(sent)) if (at < cutoff) delete sent[key];
+  try { localStorage.setItem(remindedKey, JSON.stringify(sent)); } catch { /* storage blocked */ }
+}
+
+async function systemNotification(title, body, tag) {
+  if (!notificationsSupported || Notification.permission !== 'granted') return false;
+  const options = { body, tag, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { url: location.href } };
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    if (reg) await reg.showNotification(title, options);
+    else new Notification(title, options);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function showReminderBanner(title, body) {
+  $('#reminderTitle').textContent = title;
+  $('#reminderBody').textContent = body;
+  $('#reminderToast').hidden = false;
+  clearTimeout(reminderTimer);
+  reminderTimer = setTimeout(() => { $('#reminderToast').hidden = true; }, 20000);
+}
+$('#reminderDismiss').addEventListener('click', () => { $('#reminderToast').hidden = true; });
+
+// Hidden tab without notifications: flag the tab title until the trainer comes back.
+const plainTitle = document.title;
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') document.title = plainTitle; });
+
+function checkReminders() {
+  if (!user?.pokemon || previewMode) return;
+  const prefs = reminderPrefs();
+  if (prefs.lead === null && !prefs.nudge) return;
+  const now = new Date(), sent = readReminded();
+  const due = L.dueReminders(tasks, prefs, todayKey(), now.getHours() * 60 + now.getMinutes(), sent);
+  if (!due.length) return;
+  const partner = user.nickname || P[pokemon]?.name || 'Your partner';
+  for (const item of due) {
+    sent[item.key] = Date.now();
+    const title = item.kind === 'quest' ? item.task.title : 'Evening check-in';
+    const body = item.kind === 'quest'
+      ? `${prefs.lead ? 'Starts at' : 'Starting now:'} ${formatClock(item.task.time || item.task.startTime)}. ${partner} is ready!`
+      : `${item.count} quest${item.count === 1 ? '' : 's'} still open today. ${partner} believes in you!`;
+    if (document.visibilityState === 'visible') showReminderBanner(title, body);
+    else systemNotification(title, body, item.key).then(shown => { if (!shown) document.title = `⏰ ${title} · Poképlan`; });
+  }
+  writeReminded(sent);
+}
+setInterval(checkReminders, 20000);
+document.addEventListener('visibilitychange', checkReminders);
+
+function permissionNote() {
+  if (!notificationsSupported) {
+    return /iPhone|iPad/.test(navigator.userAgent)
+      ? 'To get notifications on iPhone or iPad, add Poképlan to your Home Screen (Share → Add to Home Screen) and open it from there.'
+      : 'This browser can’t show notifications. Reminders will appear on the board while Poképlan is open.';
+  }
+  return {
+    granted: '✓ Notifications are on for this device.',
+    denied: 'Notifications are blocked for this site. Turn them on in your browser’s site settings to get reminders while Poképlan is in the background.',
+    default: 'Allow notifications to get reminders while Poképlan is in the background.',
+  }[Notification.permission];
+}
+
+$('#remindersButton').addEventListener('click', () => {
+  if (!user) return;
+  const prefs = reminderPrefs();
+  const dialog = showAccountDialog({
+    title: 'Reminders',
+    message: 'Poképlan reminds you while it’s open: in a browser tab, even in the background, or as an installed app.',
+    content: `<div class="quest-edit">
+      <label for="remLead">TIMED QUESTS<select id="remLead"><option value="off">Off</option>${Object.entries(L.REMINDER_LEADS).map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}</select></label>
+      <label for="remNudge">EVENING CHECK-IN<select id="remNudge"><option value="off">Off</option>${Object.entries(L.NUDGE_TIMES).map(([v, label]) => `<option value="${v}">At ${label} if quests are left</option>`).join('')}</select></label>
+      <p class="reminder-permission" id="remPermission"></p>
+      <button class="reminder-allow" id="remAllow" type="button" hidden>ALLOW NOTIFICATIONS</button>
+    </div>`,
+    actions: [
+      { label: 'SAVE', run: saveReminders },
+      { label: 'CANCEL', secondary: true, run: closeAccountDialog },
+    ],
+  });
+  dialog.querySelector('#remLead').value = prefs.lead === null ? 'off' : String(prefs.lead);
+  dialog.querySelector('#remNudge').value = prefs.nudge || 'off';
+  const refresh = () => {
+    dialog.querySelector('#remPermission').textContent = permissionNote();
+    dialog.querySelector('#remAllow').hidden = !notificationsSupported || Notification.permission !== 'default';
+  };
+  dialog.querySelector('#remAllow').addEventListener('click', () => Notification.requestPermission().then(refresh, refresh));
+  refresh();
+});
+
+function saveReminders(shade) {
+  const lead = shade.querySelector('#remLead').value, nudge = shade.querySelector('#remNudge').value;
+  user.reminders = { lead: lead === 'off' ? null : Number(lead), nudge: nudge === 'off' ? null : nudge };
+  persist();
+  closeAccountDialog();
+  // Turning reminders on is a good moment to ask for notifications (the browser needs a click).
+  if ((user.reminders.lead !== null || user.reminders.nudge) && notificationsSupported && Notification.permission === 'default') {
+    Notification.requestPermission().catch(() => {});
+  }
+  checkReminders();
+}
 
 // ---------------------------------------------------------------------------------------------
 // Start-up, called once every script has loaded: open the preview trainer or the saved session.

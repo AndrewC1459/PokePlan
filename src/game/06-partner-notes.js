@@ -1,4 +1,3 @@
-
 // Rotating partner notes mix encouragement with short, sourced Pokédex facts.
 (()=>{
   const footer=document.querySelector('.footnote');
@@ -15,9 +14,7 @@
     {kind:'PARTNER NOTE',text:'Take a breath, Trainer. Your next move can wait a moment.'},
     {kind:'PARTNER NOTE',text:'You and your partner make a pretty great team.'}
   ];
-  const style=document.createElement('style');
-  style.textContent='.footnote{display:flex;align-items:center;justify-content:center;gap:13px;min-height:29px;transition:opacity .3s}.footnote-message{font:16px VT323,monospace}.footnote-kind{display:block;font:7px "Press Start 2P",monospace;color:#f2cf77;margin-bottom:4px}.footnote-copy{transition:opacity .25s}.footnote-copy.fade{opacity:0}.footnote-source{margin-left:8px;color:#f2cf77;font:14px VT323,monospace;text-decoration:underline;text-underline-offset:2px}.footnote-star{color:#f2d780;font-size:17px}@media(prefers-reduced-motion:reduce){.footnote,.footnote-copy{transition:none}}';
-  document.head.appendChild(style);
+  
   const left=document.createElement('span'),copy=document.createElement('span'),right=document.createElement('span');
   left.className=right.className='footnote-star';left.textContent=right.textContent='✦';copy.className='footnote-copy';
   footer.replaceChildren(left,copy,right);
