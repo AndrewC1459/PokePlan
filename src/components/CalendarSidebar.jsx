@@ -2,7 +2,7 @@ export function Calendar() {
   return (
     <>
       <div className="side-top">
-        <h2>FIELD CALENDAR</h2>
+        <h2>CALENDAR</h2>
         <div className="zoom">
           <button data-view="day" type="button">DAY</button>
           <button data-view="week" className="active" type="button">WEEK</button>
@@ -26,7 +26,7 @@ export function Calendar() {
 export function PartnerCard() {
   return (
     <div className="companion">
-      <div className="comp-title">YOUR PARTNER</div>
+      <div className="comp-title">PARTNER</div>
       <div className="comp-row">
         <img className="comp-sprite" id="miniPokemon" alt="" />
         <div className="comp-name-wrap"><div className="comp-name" id="companionName" /><div className="comp-lock">Starter · bonded</div></div>
@@ -34,6 +34,10 @@ export function PartnerCard() {
         <span className="starter-badge">♥ LOCKED</span>
       </div>
       <div className="terrain-note" id="terrainNote" />
+      <div className="xp-box">
+        <div className="xp-top"><span id="xpLevel">LV. 1</span><span id="xpPoints">0 / 100 XP</span></div>
+        <div className="xp-track"><i id="xpFill" /></div>
+      </div>
     </div>
   );
 }

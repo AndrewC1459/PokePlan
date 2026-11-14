@@ -5,28 +5,14 @@ import TaskBoard from './components/TaskBoard.jsx';
 import CalendarSidebar from './components/CalendarSidebar.jsx';
 import AttackOverlay from './components/AttackOverlay.jsx';
 import { installCloudSync, restoreSession } from './cloudSync.js';
-import legacy01 from './legacy/legacy-01.js?raw';
-import legacy02 from './legacy/legacy-02.js?raw';
-import legacy03 from './legacy/legacy-03.js?raw';
-import legacy04 from './legacy/legacy-04.js?raw';
-import legacy05 from './legacy/legacy-05.js?raw';
-import legacy06 from './legacy/legacy-06.js?raw';
-import legacy07 from './legacy/legacy-07.js?raw';
-import legacy08 from './legacy/legacy-08.js?raw';
-import legacy09 from './legacy/legacy-09.js?raw';
-import legacy10 from './legacy/legacy-10.js?raw';
-import legacy11 from './legacy/legacy-11.js?raw';
-import legacy12 from './legacy/legacy-12.js?raw';
-import legacy13 from './legacy/legacy-13.js?raw';
-import legacy14 from './legacy/legacy-14.js?raw';
-import legacy15 from './legacy/legacy-15.js?raw';
-import legacy16 from './legacy/legacy-16.js?raw';
-import legacy17 from './legacy/legacy-17.js?raw';
-import legacy18 from './legacy/legacy-18.js?raw';
-import legacy19 from './legacy/legacy-19.js?raw';
+import * as schedule from './planner/schedule.js';
+import { mergeSaves } from './planner/merge.js';
 
-const legacyScripts = [legacy01, legacy02, legacy03, legacy04, legacy05, legacy06, legacy07,
-  legacy08, legacy09, legacy10, legacy11, legacy12, legacy13, legacy14, legacy15, legacy16, legacy17, legacy18, legacy19];
+// The game systems still run as classic scripts sharing globals, loaded in file-name order.
+// legacy-01 is the core (accounts, quests, calendar, XP); later files add scenery and polish.
+const legacyScripts = Object.entries(import.meta.glob('./legacy/*.js', { query: '?raw', import: 'default', eager: true }))
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(([path, source]) => ({ name: path.split('/').pop(), source }));
 
 function PlannerHeader() {
   return (
@@ -34,6 +20,7 @@ function PlannerHeader() {
       <div className="brand"><span className="brandmark">✦</span> POKÉPLAN <small>QUEST BOARD</small></div>
       <div className="topright">
         <span id="todayLabel" className="date-mini" />
+        <button className="name-edit" type="button">EDIT NAME</button>
         <button className="logout" id="logout" type="button">LOG OUT ↗</button>
       </div>
     </header>
@@ -47,9 +34,9 @@ function QuestBoardPage() {
       <main className="shell">
         <div className="mast">
           <div>
-            <div className="eyebrow">TRAINER <span id="trainerLabel">·</span> &nbsp; / &nbsp; FIELD NOTES</div>
-            <h1>YOUR QUEST BOARD</h1>
-            <p>One quest at a time. You’ve got this.</p>
+            <div className="eyebrow">TRAINER <span id="trainerLabel">·</span> &nbsp; / &nbsp; DAILY PLAN</div>
+            <h1>FIELD NOTES</h1>
+            <p>A little progress, one day at a time.</p>
           </div>
           <div className="datebadge" id="dateBadge" />
         </div>
@@ -63,6 +50,18 @@ function QuestBoardPage() {
 
 // Newest first. Add a new entry at the top for each update.
 const UPDATES = [
+  {
+    version: '1.3',
+    notes: [
+      'Undo: finished or deleted a quest by mistake? Press UNDO on the message that pops up (or Ctrl+Z).',
+      'Repeating quests: set a quest to repeat every day, on weekdays, every week, or every month.',
+      'Deleting a repeating quest lets you skip just that day or stop it repeating.',
+      'Saves from different devices now combine instead of overwriting each other, and coming back to the tab loads your latest progress.',
+      'The background animation runs much more smoothly and uses far less battery.',
+      'Pokémon sprites now load from Poképlan itself, so they keep working even if outside sites change.',
+      'Fixed quests with the same name sometimes showing each other’s badges, and quest times showing twice.',
+    ],
+  },
   {
     version: '1.2',
     notes: [
@@ -123,15 +122,19 @@ export default function App() {
     const injected = [];
     restoreSession().finally(() => {
       if (cancelled) return;
-      for (const source of legacyScripts) {
+      window.PlannerLogic = { ...schedule, mergeSaves };
+      for (const { name, source } of legacyScripts) {
         const script = document.createElement('script');
         script.dataset.pokeplanLegacy = 'true';
-        script.textContent = source;
+        // Name each script so errors and stack traces point at the right file.
+        script.textContent = `${source}\n//# sourceURL=${name}`;
         document.body.appendChild(script);
         injected.push(script);
       }
+      // Cloud saving must be in place before the saved session opens (opening can save).
       uninstallCloud = installCloudSync();
-      // The legacy scripts have now shown the right screen; reveal the page.
+      window.bootPlanner();
+      // The scripts have now shown the right screen; reveal the page.
       document.documentElement.classList.remove('booting');
     });
     return () => {

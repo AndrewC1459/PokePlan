@@ -6,3 +6,28 @@
 .update-notes-tabs{display:flex;gap:8px;margin:10px 0 14px}.update-notes-tabs button{cursor:pointer;border:2px solid #76523b;background:#f4ead0;color:#76523b;padding:7px 10px;box-shadow:2px 2px 0 #c9b07a;font:8px 'Press Start 2P',monospace}.update-notes-tabs button.active{background:#425e43;border-color:#425e43;color:#fff8db;box-shadow:2px 2px 0 #263a27}.update-notes-tabs button:focus-visible{outline:3px solid #e4b94f;outline-offset:2px}
 .booting .auth-wrap{visibility:hidden}.booting body::after{content:'LOADING…';position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;color:#fff2c8;font:10px 'Press Start 2P',monospace;text-shadow:2px 2px 0 #26384a;animation:bootFade .6s .3s both}@keyframes bootFade{from{opacity:0}}
 .footnote{position:relative;z-index:1;margin-top:24px}
+/* Calendar days are buttons. */
+.day{border:0;background:transparent;padding:0}
+/* Add-quest form: the quest and its button on top, its options underneath. */
+.addrow{flex-direction:column}
+.addrow-main,.addrow-options{display:flex;gap:7px;min-width:0}
+.addrow-main input{flex:1}
+.addrow-main .addbtn{min-height:40px}
+.addrow-options{flex-wrap:wrap}
+.addrow-options select{flex:1 1 96px;width:auto;min-width:0;padding:6px 4px}
+.addrow-options input.time-input{flex:0 0 106px}
+.addrow-options #customCategory{flex:1 1 120px}
+@media(max-width:450px){.addrow-main,.addrow-options{gap:5px}.addrow-options select{flex-basis:80px}.addrow-options input.time-input{flex-basis:94px;width:94px}}
+/* Quest badges. */
+.carry-badge,.repeat-badge{padding:2px 6px;font:14px VT323,monospace;white-space:nowrap}
+.carry-badge{background:#f6e5c5;color:#94652e}
+.repeat-badge{background:#e3eef3;color:#3f6b80}
+.task-meta{flex-wrap:wrap;row-gap:4px}
+/* Undo toast after finishing or deleting quests. */
+.undo-toast{position:fixed;left:50%;bottom:22px;z-index:45;transform:translateX(-50%);display:flex;align-items:center;gap:14px;max-width:calc(100vw - 32px);padding:10px 12px 10px 16px;background:#1d2d3d;color:#fff3d2;border:3px solid #f4c65c;box-shadow:4px 4px 0 #0b1520;font:19px VT323,monospace;animation:undoIn .18s steps(3)}
+.undo-toast[hidden]{display:none}
+.undo-toast span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.undo-toast button{flex:none;border:0;background:#f4c65c;color:#2b2a1d;padding:8px 11px;font:8px 'Press Start 2P',monospace;line-height:1.6;box-shadow:2px 2px 0 #8a6a25}
+.undo-toast button:focus-visible{outline:3px solid #fff3d2;outline-offset:2px}
+@keyframes undoIn{from{transform:translate(-50%,12px);opacity:0}}
+@media(max-width:760px){.undo-toast{bottom:64px}}

@@ -12,7 +12,8 @@ export default function AccountGate() {
           <form id="accountForm">
             <label className="field" id="nameField">Trainer name<input id="trainerName" autoComplete="nickname" maxLength="20" placeholder="What should we call you?" /></label>
             <label className="field">Email<input id="email" type="email" autoComplete="email" required placeholder="trainer@example.com" /></label>
-            <label className="field">Password<input id="password" type="password" autoComplete="new-password" minLength="6" required placeholder="At least 6 characters" /></label>
+            <label className="field">Password<input id="password" type="password" autoComplete="new-password" minLength="6" required placeholder="At least 6 characters" />
+              <button className="show-password" id="showPassword" type="button" aria-label="Show password">SHOW</button></label>
             <div className="auth-error" id="authError" />
             <button className="auth-submit" id="accountSubmit" type="submit">CREATE ACCOUNT →</button>
           </form>

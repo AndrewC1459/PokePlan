@@ -4,7 +4,13 @@
 // `saveAccounts()` backed by localStorage. Here localStorage becomes a cache:
 // Supabase Auth handles sign-up/log-in, and each user's save lives in the
 // `planner_saves` table (see supabase/schema.sql), so it follows them to any browser.
+//
+// Saves never blindly overwrite: each write only replaces the cloud copy this tab last saw. If
+// another device saved first, the two copies are merged (mergeRemoteSave in legacy-01) and saved
+// again. Coming back to the tab pulls any newer cloud copy.
 import { createClient } from '@supabase/supabase-js';
+import { fetchSave, pushSave, sameStamp } from './planner/cloudSave.js';
+import { mergeSaves } from './planner/merge.js';
 
 const STORE_KEY = 'pokeplan.accounts.v1';
 const SESSION_KEY = 'pokeplan.session.v1';
@@ -19,6 +25,7 @@ if (!supabase) console.warn('Poképlan: Supabase key missing, accounts are saved
 
 let currentUserId = null;
 let currentEmail = null;
+let lastStamp = null; // updated_at of the cloud copy this tab last read or wrote
 
 function readLocal() {
   try {
@@ -49,34 +56,38 @@ function cleanRecord(record, email) {
   return { ...rest, email };
 }
 
-function saveRow(record) {
-  return { user_id: currentUserId, data: cleanRecord(record, currentEmail), updated_at: new Date().toISOString() };
+// Keep the browser cache in step with a cloud copy.
+function cacheRecord(record, email) {
+  const all = readLocal();
+  const oldKey = findKey(all, email);
+  if (oldKey) delete all[oldKey];
+  all[email] = cleanRecord(record, email);
+  writeLocal(all);
 }
 
 // Fetch this user's cloud save (creating it on first login) and hand it to the legacy scripts.
 async function loadSave(user, name) {
   const email = user.email.trim().toLowerCase();
-  const { data, error } = await supabase.from('planner_saves').select('data').eq('user_id', user.id).maybeSingle();
-  if (error) throw error;
+  const row = await fetchSave(supabase, user.id);
 
   currentUserId = user.id;
   currentEmail = email;
-  let record = data?.data;
+  lastStamp = row?.updated_at || null;
+  let record = row?.data;
   if (!record || !Object.keys(record).length) {
     // First cloud login: carry over a save this browser already has for the email.
     const local = readLocal()[findKey(readLocal(), email)];
     record = local
       ? cleanRecord(local, email)
       : { email, name: name || user.user_metadata?.name || 'Trainer', pokemon: null, tasks: [], selectedDate: todayKey() };
-    const { error: insertError } = await supabase.from('planner_saves').upsert(saveRow(record));
+    const { data, error: insertError } = await supabase.from('planner_saves')
+      .upsert({ user_id: user.id, data: record, updated_at: new Date().toISOString() })
+      .select('updated_at');
     if (insertError) throw insertError;
+    lastStamp = data?.[0]?.updated_at || null;
   }
 
-  const all = readLocal();
-  const oldKey = findKey(all, email);
-  if (oldKey) delete all[oldKey];
-  all[email] = cleanRecord(record, email);
-  writeLocal(all);
+  cacheRecord(record, email);
   localStorage.setItem(SESSION_KEY, email);
   return email;
 }
@@ -119,20 +130,69 @@ export function installCloudSync() {
   const originalSave = window.saveAccounts;
   const originalLogout = window.logout;
   let timer = null;
-  let pending = null;
+  let pending = null; // { userId, data } waiting to be written
+  let flushing = null; // the write in progress, if any
   let busy = false;
 
-  async function flush() {
+  function schedule(delay) {
+    clearTimeout(timer);
+    timer = setTimeout(flush, delay);
+  }
+
+  function flush() {
     clearTimeout(timer);
     timer = null;
-    if (!pending) return;
-    const row = pending;
+    if (flushing) return flushing;
+    if (!pending) return Promise.resolve();
+    flushing = write().finally(() => {
+      flushing = null;
+      if (pending && !timer) schedule(SAVE_DELAY_MS);
+    });
+    return flushing;
+  }
+
+  async function write() {
+    const job = pending;
     pending = null;
-    const { error } = await supabase.from('planner_saves').upsert(row);
-    if (error) {
-      console.error('Poképlan: cloud save failed, retrying', error);
-      pending = pending || row;
-      timer = setTimeout(flush, 5000);
+    try {
+      const result = await pushSave(supabase, job.userId, job.data, lastStamp);
+      const loggedOut = job.userId !== currentUserId;
+      if (result.stamp) {
+        if (!loggedOut) lastStamp = result.stamp;
+        return;
+      }
+      // Another device saved first: fold its changes in rather than overwrite them.
+      const remote = result.conflict;
+      const merged = cleanRecord(mergeSaves(job.data, remote.data || {}), job.data.email);
+      if (loggedOut) {
+        // The final save on log-out: write the merge once, with no one left to show it to.
+        await pushSave(supabase, job.userId, merged, remote.updated_at);
+        return;
+      }
+      lastStamp = remote.updated_at;
+      if (!pending) pending = { userId: job.userId, data: merged };
+      // Show the merged save on screen; this saves again, replacing the queued write above.
+      window.mergeRemoteSave?.(remote.data || {});
+    } catch (err) {
+      console.error('Poképlan: cloud save failed, retrying', err);
+      if (!pending) pending = job;
+      schedule(5000);
+    }
+  }
+
+  // Coming back to the tab: if another device saved since, show its copy. Skipped while this
+  // tab has unsaved changes (the next write merges instead) or a quest battle is playing.
+  async function pull() {
+    if (!currentUserId || pending || flushing || busy || document.querySelector('#attackScreen.active')) return;
+    const userId = currentUserId;
+    try {
+      const row = await fetchSave(supabase, userId);
+      if (!row?.data || sameStamp(row.updated_at, lastStamp) || pending || flushing || userId !== currentUserId) return;
+      lastStamp = row.updated_at;
+      cacheRecord(row.data, currentEmail);
+      window.reloadAccount?.();
+    } catch (err) {
+      console.error('Poképlan: could not check for a newer cloud save', err);
     }
   }
 
@@ -140,18 +200,19 @@ export function installCloudSync() {
     const result = originalSave.apply(this, arguments);
     const key = currentUserId && all && findKey(all, currentEmail);
     if (key) {
-      pending = saveRow(all[key]);
-      clearTimeout(timer);
-      timer = setTimeout(flush, SAVE_DELAY_MS);
+      pending = { userId: currentUserId, data: cleanRecord(all[key], currentEmail) };
+      schedule(SAVE_DELAY_MS);
     }
     return result;
   };
 
   window.logout = function () {
     const email = currentEmail;
+    const finalSave = flush();
     currentUserId = null;
     currentEmail = null;
-    flush().finally(() => supabase.auth.signOut().catch(err => console.error(err)));
+    lastStamp = null;
+    finalSave.finally(() => supabase.auth.signOut().catch(err => console.error(err)));
     forgetLocalAccount(email);
     return originalLogout.apply(this, arguments);
   };
@@ -207,15 +268,17 @@ export function installCloudSync() {
     }
   }
 
-  const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
+  const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); else pull(); };
   document.addEventListener('submit', onSubmit, true);
-  document.addEventListener('visibilitychange', onHide);
+  document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('pagehide', flush);
+  window.addEventListener('focus', pull);
 
   return () => {
     document.removeEventListener('submit', onSubmit, true);
-    document.removeEventListener('visibilitychange', onHide);
+    document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('pagehide', flush);
+    window.removeEventListener('focus', pull);
     window.saveAccounts = originalSave;
     window.logout = originalLogout;
   };

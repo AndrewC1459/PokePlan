@@ -9,7 +9,7 @@
 
   const oldRefreshPartner=refreshPartner;
   refreshPartner=function(){oldRefreshPartner();if(user&&$('#companionName'))$('#companionName').textContent=user.nickname||getPartnerState()?.name||P[pokemon]?.name||'Partner'};
-  function persistNickname(value){let all=accounts(),email=localStorage.getItem(sessionKey),key=accountKey(all,email);if(!key)return false;all[key].nickname=value;saveAccounts(all);user=all[key];return true}
+  function persistNickname(value){user.nickname=value;return persist()}
   $('#nicknamePartner')?.addEventListener('click',()=>{
     if(!user)return;document.querySelector('.nickname-dialog')?.remove();
     const dialog=document.createElement('div');dialog.className='nickname-dialog';dialog.innerHTML='<section class="nickname-dialog-card" role="dialog" aria-modal="true" aria-labelledby="nicknameTitle"><h2 id="nicknameTitle">PARTNER NICKNAME</h2><p>Choose what you call your Pokémon.</p><label for="nicknameInput">NICKNAME<input id="nicknameInput" maxlength="18" autocomplete="off"></label><div class="nickname-actions"><button class="secondary" type="button" data-cancel>KEEP CURRENT</button><button type="button" data-save>SAVE NAME</button></div></section>';

@@ -76,7 +76,7 @@
       img.className = 'resident';
       img.alt = '';
       img.draggable = false;
-      img.src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/${id}.gif`;
+      img.src = `/sprites/wildlife/${id}.gif`;
       img.addEventListener('error', () => wrap.remove());
       wrap.appendChild(img);
       ambientLayer.appendChild(wrap);
@@ -199,7 +199,6 @@
       }
       for (let i = 0; i < 24; i++) { const x = (i * 89 + 11) % 640, y = 120 + (i * 53) % 170; if ((i + Math.floor(t * 2.5)) % 4 === 0) { rect(x, y, 2, 6, p.accent); rect(x - 2, y + 2, 6, 2, p.accent); } }
     }
-    requestAnimationFrame(drawWorld);
   }
   drawWorld = extraTerrain;
 
