@@ -69,6 +69,7 @@ const UPDATES = [
       'Two new biomes for every partner: Sunny Shoreline, Thunder Plains, Scorched Dunes, Dragon Canyon, Lavender Graves, and Shadow Grotto.',
       'More wild Pokémon live in every biome.',
       'Up to 8 wild Pokémon roam the screen at once.',
+      'Fixed the partner note getting covered when you have lots of tasks.',
     ],
   },
   { version: '1.1', notes: ['Fixed custom task bug.', 'Fixed login bug.'] },
