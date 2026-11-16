@@ -123,3 +123,6 @@
 .day-hint{font:15px VT323,monospace;color:#8b927f}
 .quest-edit .day-plan{margin:0 0 10px}
 .quest-edit [hidden]{display:none!important}
+.same-toggle{justify-self:start;border:0;background:transparent;padding:2px 0;color:#435c47;font:17px VT323,monospace}
+.same-toggle span{font-size:19px}
+.same-toggle:focus-visible{outline:3px solid #e4b94f;outline-offset:2px}

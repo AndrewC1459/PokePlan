@@ -54,7 +54,7 @@ const UPDATES = [
   {
     version: '1.5',
     notes: [
-      'Class schedules: choose “Certain days…” under repeat to pick the days a quest happens, each with its own time. For example, a class on Mon/Wed 11:00–12:20 and its lab on Fri 11:00–1:50.',
+      'Class schedules: choose “Certain days…” under repeat and pick the days a quest happens. They share one time, or untick “Same time for all days” to give each day its own (like a Friday lab that runs longer).',
       'End times: timed quests can now have an optional end time, shown like 11:00 AM – 12:20 PM.',
       'Adding a repeating quest jumps to the first day it happens, so you can see it right away.',
     ],

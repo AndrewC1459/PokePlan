@@ -461,49 +461,82 @@ function stopRoutine(task, routine) {
 const CATEGORIES = ['Study', 'Personal', 'Work', 'Health'];
 const toTimeInput = minutes => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 
-// Picker for "Certain days" repeats: a toggle per weekday, then a start/end row for each day picked.
-// Turning a day on copies the times last typed, so Mon/Wed/Fri at the same hour takes one entry.
-// Returns { read() -> { days } | { error }, reset() }.
+// Picker for "Certain days" repeats: a toggle per weekday and the times for the days picked.
+// "Same time for all days" (on by default) shows one time row shared by every picked day; turning
+// it off gives each day its own row, starting from the shared time (e.g. a Friday lab that runs
+// longer). Returns { read() -> { days } | { error }, reset() }.
+const DEFAULT_SPAN = { time: '09:00', end: '' };
 function mountDayPlan(box, days = {}) {
-  let plan = structuredClone(days);
-  let last = Object.values(plan).find(d => d.time) || { time: '09:00', end: '' };
+  let plan, shared, same;
+  const load = start => {
+    plan = structuredClone(start);
+    const spans = Object.values(plan);
+    shared = { ...DEFAULT_SPAN, ...spans[0] };
+    same = spans.every(s => s.time === shared.time && (s.end || '') === (shared.end || ''));
+  };
+  const timeRow = (key, label, span) => `<div class="day-time" data-day="${key}"><b>${label}</b>`
+    + `<input type="time" data-part="time" value="${escapeHtml(span.time || '')}" aria-label="${label} start time">`
+    + `<span class="time-sep">to</span><input type="time" data-part="end" value="${escapeHtml(span.end || '')}" aria-label="${label} end time (optional)"></div>`;
   const draw = () => {
     const picked = L.WEEK_ORDER.filter(d => plan[d]);
+    const rows = same || picked.length < 2
+      ? (picked.length ? timeRow('all', picked.length > 1 ? 'ALL' : L.WEEKDAY_NAMES[picked[0]], shared) : '')
+      : picked.map(d => timeRow(d, L.WEEKDAY_NAMES[d], plan[d])).join('');
     box.innerHTML = `<div class="day-picks" role="group" aria-label="Days this quest repeats on">${L.WEEK_ORDER.map(d =>
       `<button type="button" class="day-pick${plan[d] ? ' on' : ''}" data-day="${d}" aria-pressed="${Boolean(plan[d])}">${L.WEEKDAY_NAMES[d].slice(0, 2)}</button>`).join('')}</div>`
-      + picked.map(d => `<div class="day-time" data-day="${d}"><b>${L.WEEKDAY_NAMES[d]}</b>`
-        + `<input type="time" data-part="time" value="${escapeHtml(plan[d].time || '')}" aria-label="${L.WEEKDAY_NAMES[d]} start time">`
-        + `<span class="time-sep">to</span><input type="time" data-part="end" value="${escapeHtml(plan[d].end || '')}" aria-label="${L.WEEKDAY_NAMES[d]} end time (optional)"></div>`).join('')
+      + (picked.length > 1 ? `<button type="button" class="same-toggle" aria-pressed="${same}"><span aria-hidden="true">${same ? '☑' : '☐'}</span> Same time for all days</button>` : '')
+      + rows
       + `<small class="day-hint">${picked.length ? 'End time is optional. Clear the start time for an all-day quest.' : 'Pick the days this quest happens on.'}</small>`;
   };
   box.addEventListener('click', e => {
+    if (e.target.closest('.same-toggle')) {
+      same = !same;
+      // Turning it off starts every day from the shared time; turning it on uses the first day's.
+      if (!same) for (const d of Object.keys(plan)) plan[d] = { ...shared };
+      else shared = { ...plan[L.WEEK_ORDER.find(d => plan[d])] };
+      draw();
+      box.querySelector('.same-toggle')?.focus();
+      return;
+    }
     const day = e.target.closest('.day-pick')?.dataset.day;
     if (day === undefined) return;
     if (plan[day]) delete plan[day];
-    else plan[day] = { ...last };
+    else plan[day] = { ...shared };
+    // With one day left there is nothing to differ from, so its times become the shared ones.
+    const left = Object.values(plan);
+    if (left.length < 2) { same = true; if (left.length) shared = { ...left[0] }; }
     draw();
-    box.querySelector(`.day-time[data-day="${day}"] input`)?.focus();
+    box.querySelector(`.day-pick[data-day="${day}"]`)?.focus();
   });
   box.addEventListener('input', e => {
     const day = e.target.closest('.day-time')?.dataset.day;
     if (day === undefined) return;
-    plan[day][e.target.dataset.part] = e.target.value;
-    last = { ...plan[day] };
+    const part = e.target.dataset.part, value = e.target.value;
+    // One shared row (or a single day) sets every picked day; separate rows set just their own.
+    if (day === 'all') {
+      shared[part] = value;
+      for (const d of Object.keys(plan)) plan[d][part] = value;
+    } else {
+      plan[day][part] = value;
+      shared = { ...plan[day] };
+    }
   });
+  load(days);
   draw();
   return {
     read() {
       const out = {};
       for (const d of L.WEEK_ORDER) {
         if (!plan[d]) continue;
-        const time = plan[d].time || '', end = time ? plan[d].end || '' : '';
+        const span = same ? shared : plan[d];
+        const time = span.time || '', end = time ? span.end || '' : '';
         const problem = checkSpan(time, end);
         if (problem) return { error: `${L.WEEKDAY_NAMES[d]}: ${problem}` };
         out[d] = { time, end };
       }
       return Object.keys(out).length ? { days: out } : { error: 'Pick at least one day for this quest.' };
     },
-    reset() { plan = {}; last = { time: '09:00', end: '' }; draw(); },
+    reset() { load({}); draw(); },
   };
 }
 
