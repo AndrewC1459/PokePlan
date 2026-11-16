@@ -109,3 +109,17 @@
 .reminder-copy span{font:18px VT323,monospace;color:#5e6b55;line-height:1.1}
 .reminder-toast button{flex:none;border:0;background:#425e43;color:#fff8db;padding:8px 10px;font:8px 'Press Start 2P',monospace;line-height:1.6}
 @keyframes reminderIn{from{transform:translate(-50%,-12px);opacity:0}}
+/* Start/end times, and the "Certain days" picker (add form and edit dialog). */
+.time-sep{align-self:center;font:16px VT323,monospace;color:#7c887a}
+.day-plan{display:grid;gap:6px;margin-top:8px}
+.day-plan[hidden]{display:none}
+.day-picks{display:flex;gap:4px}
+.day-pick{flex:1 1 0;min-width:0;border:2px solid #d9d5c3;background:#faf7e9;color:#76806e;padding:5px 0;font:16px VT323,monospace}
+.day-pick.on{background:#435c47;border-color:#263d31;color:#fff4d0}
+.day-pick:focus-visible{outline:3px solid #e4b94f;outline-offset:1px}
+.day-time{display:flex;align-items:center;gap:6px;font:16px VT323,monospace;color:#596451}
+.day-time b{font-weight:400;flex:0 0 32px}
+.day-time input,.addrow .day-time input{flex:1 1 0;width:auto;min-width:0;margin:0;padding:5px 6px;border:2px solid #d9d5c3;background:#fffefa;font:16px VT323,monospace;color:#293448}
+.day-hint{font:15px VT323,monospace;color:#8b927f}
+.quest-edit .day-plan{margin:0 0 10px}
+.quest-edit [hidden]{display:none!important}

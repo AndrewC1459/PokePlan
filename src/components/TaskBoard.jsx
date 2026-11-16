@@ -31,19 +31,23 @@ export default function TaskBoard() {
             <option value="allDay">All day</option>
             <option value="time">At a time</option>
           </select>
-          <input id="taskTime" className="time-input" type="time" defaultValue="09:00" aria-label="Task time" />
+          <input id="taskTime" className="time-input" type="time" defaultValue="09:00" aria-label="Start time" />
+          <span className="time-sep" id="taskEndSep">to</span>
+          <input id="taskEnd" className="time-input" type="time" aria-label="End time (optional)" title="End time (optional)" />
           <select id="repeatMode" aria-label="Repeat">
             <option value="none">Just once</option>
             <option value="daily">Every day</option>
             <option value="weekdays">Weekdays</option>
             <option value="weekly">Every week</option>
             <option value="monthly">Every month</option>
+            <option value="days">Certain days…</option>
           </select>
           <select id="category" aria-label="Task category">
             <option value="Study">Study</option><option value="Personal">Personal</option><option value="Work">Work</option><option value="Health">Health</option><option value="custom">Custom…</option>
           </select>
           <input id="customCategory" placeholder="Your task type…" aria-label="Custom task type" maxLength="24" autoComplete="off" hidden />
         </div>
+        <div className="day-plan" id="dayPlan" hidden />
       </form>
       <div className="reminder-toast" id="reminderToast" role="alert" hidden>
         <span className="reminder-bell" aria-hidden="true">⏰</span>

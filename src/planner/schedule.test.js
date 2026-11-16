@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, dayHasQuests, dueReminders, fillRoutineDay, occursOn, rollover, routineTaskId, sortForDay, taskMinutes, TOMBSTONE_DAYS } from './schedule.js';
+import { addDays, dayHasQuests, dueReminders, fillRoutineDay, occursOn, repeatLabel, rollover, routineTaskId, routineTimes, sortForDay, taskMinutes, TOMBSTONE_DAYS } from './schedule.js';
 
 const routine = (repeat, start = '2026-11-02', extra = {}) => ({
   id: 'r1', title: 'Stretch', category: 'Health', allDay: true, time: '', repeat, start, skip: [], ...extra,
@@ -50,6 +50,35 @@ describe('occursOn', () => {
   it('honours skipped days and unknown repeat values', () => {
     expect(occursOn(routine('daily', '2026-11-02', { skip: ['2026-11-04'] }), '2026-11-04')).toBe(false);
     expect(occursOn(routine('hourly'), '2026-11-04')).toBe(false);
+  });
+});
+
+describe('certain days', () => {
+  // A class Mon/Wed 11:00-12:20 with a Friday lab 11:00-13:50. 2026-11-02 is a Monday.
+  const r = routine('days', '2026-11-02', {
+    allDay: false,
+    days: { 1: { time: '11:00', end: '12:20' }, 3: { time: '11:00', end: '12:20' }, 5: { time: '11:00', end: '13:50' } },
+  });
+  it('only falls on the chosen weekdays', () => {
+    expect(['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08'].map(k => occursOn(r, k)))
+      .toEqual([true, false, true, false, true, false, false]);
+    expect(occursOn(routine('days'), '2026-11-02')).toBe(false);
+  });
+  it('gives each day its own times', () => {
+    expect(routineTimes(r, '2026-11-04')).toEqual({ allDay: false, time: '11:00', end: '12:20' });
+    expect(fillRoutineDay([], [r], '2026-11-06', '2026-11-06').tasks[0]).toMatchObject({ time: '11:00', end: '13:50', allDay: false });
+  });
+  it('treats a day with no time as all day', () => {
+    const open = routine('days', '2026-11-02', { days: { 6: { time: '', end: '' } } });
+    expect(routineTimes(open, '2026-11-07')).toEqual({ allDay: true, time: '', end: '' });
+  });
+  it('labels the badge with the days, Monday first', () => {
+    expect(repeatLabel({ ...r, days: { ...r.days, 0: { time: '' } } })).toBe('MON · WED · FRI · SUN');
+    expect(repeatLabel(routine('weekly'))).toBe('Every week');
+  });
+  it('other repeats keep their shared time and end', () => {
+    expect(routineTimes(routine('daily', '2026-11-02', { allDay: false, time: '08:00', end: '08:30' }), '2026-11-05'))
+      .toEqual({ allDay: false, time: '08:00', end: '08:30' });
   });
 });
 

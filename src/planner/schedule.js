@@ -1,10 +1,15 @@
 // Date keys, repeating quests, and the daily rollover. Pure functions: no DOM, no storage.
 //
 // A task looks like:
-//   { id, title, category, date: 'YYYY-MM-DD', allDay, time, done, updatedAt,
+//   { id, title, category, date: 'YYYY-MM-DD', allDay, time, end?, done, updatedAt,
 //     routineId?, carriedFrom? }
+// `time` is the start ('HH:MM') and `end` an optional finish time.
 // A routine (repeating quest) looks like:
-//   { id, title, category, allDay, time, repeat, start: 'YYYY-MM-DD', skip: [dateKey], updatedAt }
+//   { id, title, category, allDay, time, end?, repeat, start: 'YYYY-MM-DD', skip: [dateKey],
+//     updatedAt, days? }
+// With repeat 'days', `days` maps weekday numbers (0 = Sunday) to that day's own { time, end };
+// an empty time means all day. A class on Mon/Wed 11:00-12:20 plus a Fri lab 11:00-13:50 is
+// one routine: { 1: { time: '11:00', end: '12:20' }, 3: {...}, 5: { time: '11:00', end: '13:50' } }.
 // Routines are templates. Each day they occur on gets a real task (id `${routine.id}@${date}`),
 // so finishing, XP, and the battle animation treat it like any other quest.
 
@@ -13,7 +18,12 @@ export const REPEATS = {
   weekdays: 'Weekdays',
   weekly: 'Every week',
   monthly: 'Every month',
+  days: 'Certain days',
 };
+
+export const WEEKDAY_NAMES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+// Monday first, the way class schedules are usually written.
+export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 // How long a deleted item is remembered, so another device's older copy can't bring it back.
 export const TOMBSTONE_DAYS = 30;
@@ -49,6 +59,8 @@ export function occursOn(routine, key) {
       return day.getDay() >= 1 && day.getDay() <= 5;
     case 'weekly':
       return day.getDay() === dateFromKey(routine.start).getDay();
+    case 'days':
+      return Boolean(routine.days?.[day.getDay()]);
     case 'monthly': {
       // Day 31 repeats on the last day of shorter months.
       const want = dateFromKey(routine.start).getDate();
@@ -70,6 +82,20 @@ export function makeId(prefix = 'task') {
   return `${prefix}-${Date.now()}-${rand}`;
 }
 
+// The times a routine's copy on `key` gets: that weekday's own times for 'days', else the shared ones.
+export function routineTimes(routine, key) {
+  const own = routine.repeat === 'days' ? routine.days?.[dateFromKey(key).getDay()] : null;
+  const source = own ? { time: own.time, end: own.end } : routine;
+  const allDay = (!own && Boolean(routine.allDay)) || !source.time;
+  return { allDay, time: allDay ? '' : source.time, end: allDay ? '' : source.end || '' };
+}
+
+// Short label for the repeat badge: "MON · WED · FRI" for certain days, else the REPEATS name.
+export function repeatLabel(routine) {
+  if (routine?.repeat !== 'days') return REPEATS[routine?.repeat] || '';
+  return WEEK_ORDER.filter(d => routine.days?.[d]).map(d => WEEKDAY_NAMES[d]).join(' · ');
+}
+
 export function routineTask(routine, key, now = Date.now()) {
   return {
     id: routineTaskId(routine, key),
@@ -77,8 +103,7 @@ export function routineTask(routine, key, now = Date.now()) {
     title: routine.title,
     category: routine.category,
     date: key,
-    allDay: routine.allDay,
-    time: routine.time || '',
+    ...routineTimes(routine, key),
     done: false,
     updatedAt: now,
   };

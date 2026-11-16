@@ -327,9 +327,24 @@ function formatClock(value) {
   return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
+// "11:00 AM – 12:20 PM", or just the start when there is no end time.
+function formatSpan(t) {
+  if (t.allDay || (!t.time && !t.startTime)) return 'ALL DAY';
+  const start = formatClock(t.time || t.startTime);
+  return t.end ? `${start} – ${formatClock(t.end)}` : start;
+}
+
+// The end time, if given, has to come after the start. Returns an error message or ''.
+function checkSpan(time, end) {
+  return time && end && end <= time ? 'The end time has to be after the start time.' : '';
+}
+
+// "every week", or "on MON · WED · FRI" for certain days.
+const repeatText = routine => (routine.repeat === 'days' ? 'on ' + L.repeatLabel(routine) : L.REPEATS[routine.repeat].toLowerCase());
+
 function taskRow(t) {
   const routine = t.routineId && user.routines.find(r => r.id === t.routineId);
-  const when = t.allDay || (!t.time && !t.startTime) ? 'ALL DAY' : formatClock(t.time || t.startTime);
+  const when = formatSpan(t);
   const category = t.category || 'Personal';
   const row = document.createElement('div');
   row.className = 'task' + (selected.has(t.id) ? ' selected' : '') + (t.done ? ' done' : '');
@@ -340,7 +355,7 @@ function taskRow(t) {
     <div class="task-copy"><button class="task-title" type="button" title="Edit quest">${escapeHtml(t.title)}</button>
     <div class="task-meta"><span class="tag ${escapeHtml(category.toLowerCase())}">${escapeHtml(category)}</span>
     <span class="time-badge">${when}</span>
-    ${routine ? `<span class="repeat-badge" title="Repeating quest">↻ ${escapeHtml(L.REPEATS[routine.repeat].toUpperCase())}</span>` : ''}
+    ${routine ? `<span class="repeat-badge" title="Repeating quest">↻ ${escapeHtml(L.repeatLabel(routine).toUpperCase())}</span>` : ''}
     ${t.carriedFrom && !t.done ? '<span class="carry-badge">CARRIED OVER</span>' : ''}</div></div>
     <div class="task-right"><span class="priority">${t.done ? 'FINISHED' : ''}</span>
     <button class="edit" type="button" title="Edit" aria-label="Edit ${escapeHtml(t.title)}">✎</button>
@@ -411,7 +426,7 @@ function deleteTask(task) {
   }
   showAccountDialog({
     title: 'Delete repeating quest?',
-    message: `“${task.title}” repeats ${L.REPEATS[routine.repeat].toLowerCase()}.`,
+    message: `“${task.title}” repeats ${repeatText(routine)}.`,
     actions: [
       { label: 'JUST THIS DAY', run: () => { closeAccountDialog(); skipRoutineDay(task, routine); } },
       { label: 'STOP REPEATING', run: () => { closeAccountDialog(); stopRoutine(task, routine); } },
@@ -446,9 +461,66 @@ function stopRoutine(task, routine) {
 const CATEGORIES = ['Study', 'Personal', 'Work', 'Health'];
 const toTimeInput = minutes => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 
+// Picker for "Certain days" repeats: a toggle per weekday, then a start/end row for each day picked.
+// Turning a day on copies the times last typed, so Mon/Wed/Fri at the same hour takes one entry.
+// Returns { read() -> { days } | { error }, reset() }.
+function mountDayPlan(box, days = {}) {
+  let plan = structuredClone(days);
+  let last = Object.values(plan).find(d => d.time) || { time: '09:00', end: '' };
+  const draw = () => {
+    const picked = L.WEEK_ORDER.filter(d => plan[d]);
+    box.innerHTML = `<div class="day-picks" role="group" aria-label="Days this quest repeats on">${L.WEEK_ORDER.map(d =>
+      `<button type="button" class="day-pick${plan[d] ? ' on' : ''}" data-day="${d}" aria-pressed="${Boolean(plan[d])}">${L.WEEKDAY_NAMES[d].slice(0, 2)}</button>`).join('')}</div>`
+      + picked.map(d => `<div class="day-time" data-day="${d}"><b>${L.WEEKDAY_NAMES[d]}</b>`
+        + `<input type="time" data-part="time" value="${escapeHtml(plan[d].time || '')}" aria-label="${L.WEEKDAY_NAMES[d]} start time">`
+        + `<span class="time-sep">to</span><input type="time" data-part="end" value="${escapeHtml(plan[d].end || '')}" aria-label="${L.WEEKDAY_NAMES[d]} end time (optional)"></div>`).join('')
+      + `<small class="day-hint">${picked.length ? 'End time is optional. Clear the start time for an all-day quest.' : 'Pick the days this quest happens on.'}</small>`;
+  };
+  box.addEventListener('click', e => {
+    const day = e.target.closest('.day-pick')?.dataset.day;
+    if (day === undefined) return;
+    if (plan[day]) delete plan[day];
+    else plan[day] = { ...last };
+    draw();
+    box.querySelector(`.day-time[data-day="${day}"] input`)?.focus();
+  });
+  box.addEventListener('input', e => {
+    const day = e.target.closest('.day-time')?.dataset.day;
+    if (day === undefined) return;
+    plan[day][e.target.dataset.part] = e.target.value;
+    last = { ...plan[day] };
+  });
+  draw();
+  return {
+    read() {
+      const out = {};
+      for (const d of L.WEEK_ORDER) {
+        if (!plan[d]) continue;
+        const time = plan[d].time || '', end = time ? plan[d].end || '' : '';
+        const problem = checkSpan(time, end);
+        if (problem) return { error: `${L.WEEKDAY_NAMES[d]}: ${problem}` };
+        out[d] = { time, end };
+      }
+      return Object.keys(out).length ? { days: out } : { error: 'Pick at least one day for this quest.' };
+    },
+    reset() { plan = {}; last = { time: '09:00', end: '' }; draw(); },
+  };
+}
+
+// Starting days for the picker when an existing repeat switches to "Certain days".
+function daysFromRoutine(routine) {
+  if (routine.repeat === 'days') return routine.days || {};
+  const times = { time: routine.allDay ? '' : routine.time || '', end: routine.allDay ? '' : routine.end || '' };
+  const pick = routine.repeat === 'daily' ? [0, 1, 2, 3, 4, 5, 6]
+    : routine.repeat === 'weekdays' ? [1, 2, 3, 4, 5]
+    : routine.repeat === 'weekly' ? [L.dateFromKey(routine.start).getDay()] : [];
+  return Object.fromEntries(pick.map(d => [d, { ...times }]));
+}
+
 function editTask(task) {
   const routine = task.routineId && user.routines.find(r => r.id === task.routineId);
-  const source = routine || task;
+  // A "certain days" repeat shows this day's own times if it switches back to a single time.
+  const source = routine ? { ...routine, ...L.routineTimes(routine, task.date) } : task;
   const minutes = L.taskMinutes(source);
   const category = source.category || 'Personal';
   const dialog = showAccountDialog({
@@ -457,9 +529,10 @@ function editTask(task) {
     content: `<div class="quest-edit">
       <label for="editTitle">QUEST<input id="editTitle" maxlength="90" autocomplete="off"></label>
       ${routine
-        ? `<label for="editRepeat">REPEATS<select id="editRepeat">${Object.entries(L.REPEATS).map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}</select></label>`
+        ? `<label for="editRepeat">REPEATS<select id="editRepeat">${Object.entries(L.REPEATS).map(([v, label]) => `<option value="${v}">${label}</option>`).join('')}</select></label>
+           <div class="day-plan" id="editDays"></div>`
         : `<label for="editDate">DAY<input id="editDate" type="date" min="${todayKey()}"></label>`}
-      <label for="editTiming">TIME<span class="quest-edit-row"><select id="editTiming"><option value="allDay">All day</option><option value="time">At a time</option></select><input id="editTime" type="time" aria-label="Quest time"></span></label>
+      <label for="editTiming" id="editTimeRow">TIME<span class="quest-edit-row"><select id="editTiming"><option value="allDay">All day</option><option value="time">At a time</option></select><input id="editTime" type="time" aria-label="Start time"><span class="time-sep" id="editEndSep">to</span><input id="editEnd" type="time" aria-label="End time (optional)" title="End time (optional)"></span></label>
       <label for="editCategory">TYPE<span class="quest-edit-row"><select id="editCategory">${CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}<option value="custom">Custom…</option></select><input id="editCustom" maxlength="24" placeholder="Your task type…" aria-label="Custom task type"></span></label>
     </div>`,
     actions: [
@@ -473,13 +546,19 @@ function editTask(task) {
   else field('editDate').value = task.date;
   field('editTiming').value = minutes === null ? 'allDay' : 'time';
   field('editTime').value = toTimeInput(minutes ?? 540);
+  field('editEnd').value = minutes === null ? '' : source.end || '';
   field('editCategory').value = CATEGORIES.includes(category) ? category : 'custom';
   field('editCustom').value = CATEGORIES.includes(category) ? '' : category;
+  if (routine) dialog.dayPlan = mountDayPlan(field('editDays'), daysFromRoutine(routine));
   const sync = () => {
-    field('editTime').hidden = field('editTiming').value === 'allDay';
+    const byDay = routine && field('editRepeat').value === 'days', allDay = field('editTiming').value === 'allDay';
+    if (routine) field('editDays').hidden = !byDay;
+    field('editTimeRow').hidden = byDay;
+    field('editTime').hidden = field('editEnd').hidden = field('editEndSep').hidden = allDay;
     field('editCustom').hidden = field('editCategory').value !== 'custom';
   };
   field('editTiming').addEventListener('change', sync);
+  if (routine) field('editRepeat').addEventListener('change', sync);
   field('editCategory').addEventListener('change', () => { sync(); if (!field('editCustom').hidden) field('editCustom').focus(); });
   dialog.querySelector('.quest-edit').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') saveEdit(dialog, task, routine); });
   sync();
@@ -492,19 +571,32 @@ function saveEdit(shade, task, routine) {
   const title = field('editTitle').value.trim();
   const category = field('editCategory').value === 'custom' ? field('editCustom').value.trim() : field('editCategory').value;
   const allDay = field('editTiming').value === 'allDay', time = allDay ? '' : field('editTime').value;
+  const end = allDay ? '' : field('editEnd').value;
+  const repeat = routine ? field('editRepeat').value : null;
   if (!title) return say('Give the quest a name.');
   if (!category) return say('Enter a task type.');
-  if (!allDay && !time) return say('Pick a time, or choose All day.');
-  const before = snapshot(), now = Date.now(), fields = { title, category, allDay, time, updatedAt: now };
+  let days = null;
+  if (repeat === 'days') {
+    const plan = shade.dayPlan.read();
+    if (plan.error) return say(plan.error);
+    days = plan.days;
+  } else {
+    if (!allDay && !time) return say('Pick a time, or choose All day.');
+    if (checkSpan(time, end)) return say(checkSpan(time, end));
+  }
+  const before = snapshot(), now = Date.now(), fields = { title, category, allDay, time, end, updatedAt: now };
 
   if (routine) {
-    const updated = { ...routine, ...fields, repeat: field('editRepeat').value };
+    const updated = days
+      ? { ...routine, title, category, allDay: false, time: '', end: '', repeat, days, updatedAt: now }
+      : { ...routine, ...fields, repeat, days: undefined };
     user.routines = user.routines.map(r => (r.id === routine.id ? updated : r));
     // Open copies from today on follow the new details; ones that no longer fall on a repeat day go.
     const today = todayKey();
     tasks = tasks
       .filter(t => t.routineId !== routine.id || t.done || t.date < today || L.occursOn(updated, t.date))
-      .map(t => (t.routineId === routine.id && !t.done && t.date >= today ? { ...t, ...fields } : t));
+      .map(t => (t.routineId === routine.id && !t.done && t.date >= today
+        ? { ...t, title, category, ...L.routineTimes(updated, t.date), updatedAt: now } : t));
     if (task.done) tasks = tasks.map(t => (t.id === task.id ? { ...t, title, category } : t));
   } else {
     const date = field('editDate').value || task.date;
@@ -524,15 +616,33 @@ function saveEdit(shade, task, routine) {
 // ---------------------------------------------------------------------------------------------
 // Adding quests.
 
+const addDayPlan = mountDayPlan($('#dayPlan'));
+
+// "Certain days" swaps the single time for the per-day picker.
 function updateTimeFields() {
-  $('#taskTime').hidden = $('#scheduleMode').value === 'allDay';
+  const byDay = $('#repeatMode').value === 'days', allDay = $('#scheduleMode').value === 'allDay';
+  $('#scheduleMode').hidden = byDay;
+  $('#taskTime').hidden = $('#taskEnd').hidden = $('#taskEndSep').hidden = byDay || allDay;
+  $('#dayPlan').hidden = !byDay;
 }
 function updateCategoryField() {
   const custom = $('#customCategory');
   custom.hidden = $('#category').value !== 'custom';
   if (!custom.hidden) custom.focus();
 }
+// Shows a problem on a field until the form is next touched (typing, picking a day, or pressing ADD,
+// which checks again), so a stale message never blocks the next try.
+function flagField(el, message) {
+  el.setCustomValidity(message);
+  el.reportValidity();
+  const clear = () => {
+    el.setCustomValidity('');
+    for (const type of ['input', 'click']) $('#addForm').removeEventListener(type, clear, true);
+  };
+  for (const type of ['input', 'click']) $('#addForm').addEventListener(type, clear, true);
+}
 $('#scheduleMode').addEventListener('change', updateTimeFields);
+$('#repeatMode').addEventListener('change', updateTimeFields);
 $('#category').addEventListener('change', updateCategoryField);
 updateTimeFields();
 
@@ -550,20 +660,40 @@ $('#addForm').addEventListener('submit', e => {
   }
   custom.setCustomValidity('');
   const allDay = $('#scheduleMode').value === 'allDay', time = allDay ? '' : $('#taskTime').value;
+  const end = allDay ? '' : $('#taskEnd').value;
   const repeat = $('#repeatMode').value, now = Date.now();
+  let days = null;
+  if (repeat === 'days') {
+    const plan = addDayPlan.read();
+    if (plan.error) return flagField(input, plan.error);
+    days = plan.days;
+  } else if (checkSpan(time, end)) {
+    return flagField($('#taskEnd'), checkSpan(time, end));
+  }
 
   if (L.REPEATS[repeat]) {
-    // Repeating quests can't start in the past; today's or the chosen day's copy appears right away.
+    // Repeating quests can't start in the past. Jump to the first day it lands on, so the new quest
+    // shows up right away (a Mon/Wed class added on a Tuesday opens Wednesday).
     const start = selectedDate < todayKey() ? todayKey() : selectedDate;
-    user.routines.push({ id: L.makeId('routine'), title, category, allDay, time, repeat, start, skip: [], updatedAt: now });
+    const routine = days
+      ? { id: L.makeId('routine'), title, category, allDay: false, time: '', end: '', repeat, days, start, skip: [], updatedAt: now }
+      : { id: L.makeId('routine'), title, category, allDay, time, end, repeat, start, skip: [], updatedAt: now };
+    user.routines.push(routine);
     selectedDate = start;
+    for (let i = 0, key = start; i < 366; i++, key = L.addDays(key, 1)) {
+      if (L.occursOn(routine, key)) { selectedDate = key; break; }
+    }
+    focusCalendar();
     showDate();
   } else {
-    tasks.unshift({ id: L.makeId(), title, category, done: false, date: selectedDate, allDay, time, updatedAt: now });
+    tasks.unshift({ id: L.makeId(), title, category, done: false, date: selectedDate, allDay, time, end, updatedAt: now });
   }
 
   input.value = '';
+  $('#taskEnd').value = '';
   $('#repeatMode').value = 'none';
+  addDayPlan.reset();
+  updateTimeFields();
   if (chosen === 'custom') {
     custom.value = '';
     $('#category').value = 'Study';
@@ -664,12 +794,17 @@ $('#next').addEventListener('click', () => moveCalendar(1));
 document.querySelectorAll('.zoom button').forEach(b => b.addEventListener('click', () => {
   view = b.dataset.view;
   document.querySelectorAll('.zoom button').forEach(x => x.classList.toggle('active', x === b));
+  focusCalendar();
+  renderCalendar();
+}));
+
+// Point the calendar at the period holding the picked day.
+function focusCalendar() {
   const focus = L.dateFromKey(selectedDate), now = new Date();
   if (view === 'day') offset = Math.round((focus - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
   else if (view === 'week') offset = Math.round((startOfWeek(focus) - startOfWeek(now)) / 604800000);
   else offset = (focus.getFullYear() - now.getFullYear()) * 12 + focus.getMonth() - now.getMonth();
-  renderCalendar();
-}));
+}
 
 // ---------------------------------------------------------------------------------------------
 // Partner card and XP. Later scripts wrap renderPokemon/renderXP to add biomes and evolutions.
