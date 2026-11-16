@@ -8,6 +8,7 @@ import { installCloudSync, restoreSession } from './cloudSync.js';
 import * as schedule from './planner/schedule.js';
 import { mergeSaves } from './planner/merge.js';
 import * as team from './planner/team.js';
+import * as battle from './planner/battle.js';
 
 // The game systems still run as classic scripts sharing globals, loaded in file-name order.
 // 01-core.js holds accounts, quests, calendar and XP; later files add scenery and polish.
@@ -52,6 +53,15 @@ function QuestBoardPage() {
 
 // Newest first. Add a new entry at the top for each update.
 const UPDATES = [
+  {
+    version: '2.0',
+    notes: [
+      'Wild battles: a wild Pokémon from your biome appears every day. Its HP is the number of quests on today’s list.',
+      'Every quest you finish is a hit. Clear the whole list and you catch it! It joins your party (up to 6), or your box once the party is full.',
+      'Didn’t clear the list? It just runs off, and a new one shows up tomorrow. Nothing is lost.',
+      'Coming next in 2.0: managing your party, Exp. Share, a collection for every biome, new biomes, and new attack animations.',
+    ],
+  },
   {
     version: '1.5',
     notes: [
@@ -143,7 +153,7 @@ export default function App() {
     const injected = [];
     restoreSession().finally(() => {
       if (cancelled) return;
-      window.PlannerLogic = { ...schedule, ...team, mergeSaves };
+      window.PlannerLogic = { ...schedule, ...team, ...battle, mergeSaves };
       for (const { name, source } of gameScripts) {
         const script = document.createElement('script');
         script.dataset.pokeplanLegacy = 'true';

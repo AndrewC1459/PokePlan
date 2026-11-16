@@ -126,3 +126,47 @@
 .same-toggle{justify-self:start;border:0;background:transparent;padding:2px 0;color:#435c47;font:17px VT323,monospace}
 .same-toggle span{font-size:19px}
 .same-toggle:focus-visible{outline:3px solid #e4b94f;outline-offset:2px}
+/* 2.0 wild battles: the strip under the list title. */
+.encounter{display:flex;align-items:center;gap:12px;padding:9px 18px;background:#eef3e4;border-bottom:2px solid #d9dcc4}
+.encounter[hidden]{display:none}
+.encounter.caught{background:#f6efd4}
+.enc-sprite{flex:none;width:56px;height:56px;object-fit:contain;image-rendering:pixelated;background:radial-gradient(ellipse 60% 22% at 50% 88%,#c6d2ae 0 95%,transparent 100%)}
+.enc-copy{flex:1;min-width:0;display:grid;gap:4px}
+.enc-top{display:flex;align-items:baseline;gap:8px;min-width:0}
+.enc-top b{font:9px 'Press Start 2P',monospace;color:#2f3d33;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.enc-top span{font:16px VT323,monospace;color:#6c7660;white-space:nowrap}
+.enc-top .enc-badge{margin-left:auto;color:#3f7148}
+.encounter small{font:15px VT323,monospace;color:#6c7660;line-height:1.1}
+.encounter.caught .hp-track{display:none}
+.hp-track{height:9px;border:2px solid #56604c;background:#e3e0cc;padding:1px}
+.hp-track i{display:block;height:100%;width:100%;background:#58b05a;transition:width .45s}
+.hp-track.mid i{background:#e6b93b}
+.hp-track.low i{background:#d8553f}
+/* The wild Pokémon in the attack screen. */
+.wild-mon{position:absolute;z-index:1;width:104px;height:104px;left:calc(78% - 52px);top:calc(50% - 60px);object-fit:contain;image-rendering:pixelated;filter:drop-shadow(0 5px 0 #0c1623);transition:transform .4s,opacity .4s,filter .4s}
+.wild-mon[hidden]{display:none}
+.wild-mon.hurt{animation:wildHurt .45s steps(2)}
+@keyframes wildHurt{0%,50%{opacity:.2;translate:7px 0}25%,75%{opacity:1;translate:-7px 0}100%{opacity:1;translate:0 0}}
+.wild-mon.fainted{transform:translateY(22px);opacity:.55;filter:grayscale(.7) drop-shadow(0 2px 0 #0c1623)}
+.wild-mon.absorbed{transform:scale(.08);opacity:0;filter:brightness(5)}
+.wild-battle .target-card{top:7%;right:4%;max-width:44%;padding:9px 11px}
+.wild-battle .attack-name{left:4%;top:8%;transform:none}
+.wild-battle.catching .target-card{display:none}
+.wild-hp{display:grid;gap:3px;margin-top:7px}
+.wild-hp[hidden]{display:none}
+#wildHpText{font:15px VT323,monospace;color:#5e6b55;justify-self:end}
+.catch-ball{position:absolute;z-index:3;width:30px;height:30px;left:calc(25% - 15px);top:calc(62% - 15px);transform-origin:50% 85%}
+.catch-ball[hidden]{display:none}
+.catch-ball.thrown{animation:ballThrow .65s linear forwards}
+@keyframes ballThrow{0%{left:calc(25% - 15px);top:calc(62% - 15px);rotate:0deg}45%{top:calc(16% - 15px)}100%{left:calc(78% - 15px);top:calc(42% - 15px);rotate:900deg}}
+.catch-ball.landed{left:calc(78% - 15px);top:calc(60% - 15px);animation:ballDrop .45s cubic-bezier(.55,0,1,.45)}
+@keyframes ballDrop{from{top:calc(42% - 15px)}}
+.catch-ball.settled{left:calc(78% - 15px);top:calc(60% - 15px)}
+.catch-ball.wobble{animation:ballWobble .6s ease-in-out}
+@keyframes ballWobble{0%,100%{rotate:0deg}25%{rotate:-24deg}75%{rotate:24deg}}
+.catch-ball.caught{animation:ballClick .35s steps(2) 3;filter:drop-shadow(0 0 6px #ffe26b)}
+@keyframes ballClick{50%{filter:drop-shadow(0 0 12px #fff6b8) brightness(1.2)}}
+.catch-card{display:flex;align-items:center;gap:12px;margin:2px 0 4px}
+.catch-card img{flex:none;width:76px;height:76px;object-fit:contain;image-rendering:pixelated;background:#f1ead2;border:2px solid #d4c8a9}
+.account-dialog-card .catch-card p{margin:0;font:17px VT323,monospace}
+@media(max-width:450px){.encounter{padding:8px 10px;gap:9px}.enc-sprite{width:46px;height:46px}.wild-mon{width:80px;height:80px;left:calc(78% - 40px);top:calc(60% - 46px)}.wild-battle .target-card{max-width:50%}}

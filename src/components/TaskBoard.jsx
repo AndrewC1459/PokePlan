@@ -8,6 +8,7 @@ export default function TaskBoard() {
           <div className="bar"><i id="progressBar" /></div>
         </div>
       </div>
+      <div className="encounter" id="encounter" hidden />
       <div className="task-head">
         <h2>TASKS <span id="taskCount">(0)</span></h2>
         <div className="filters">

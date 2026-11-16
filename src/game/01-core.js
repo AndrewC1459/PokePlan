@@ -892,6 +892,11 @@ resizeWorld();
 const attackCanvas = $('#attackCanvas'), actx = attackCanvas.getContext('2d');
 let attackRaf = 0;
 let drawMove = () => {};
+// Battle hooks, filled in by 10-wild-battles.js: set up the target for a quest, react to a landed
+// hit, and play anything that should happen before the attack screen closes (a catch).
+let battleTarget = t => { $('#targetTitle').textContent = t.title; };
+let battleHit = () => {};
+let battleFinish = async () => {};
 
 async function animateQuests(ids) {
   const targets = ids.map(id => tasks.find(t => t.id === id)).filter(t => t && !t.done);
@@ -905,7 +910,7 @@ async function animateQuests(ids) {
     $('#attackScreen').classList.add('active');
     $('#attacker').src = p.sprite;
     $('#attackName').textContent = p.move;
-    $('#targetTitle').textContent = t.title;
+    battleTarget(t);
     $('#attackCaption').textContent = p.name + ' is charging…';
     $('#attackCounter').textContent = targets.length > 1 ? `${i + 1} / ${targets.length}` : '✦';
     cancelAnimationFrame(attackRaf);
@@ -925,9 +930,11 @@ async function animateQuests(ids) {
     user.xp = user.mons.find(m => m.id === L.STARTER_ID)?.xp ?? (Number(user.xp) || 0) + XP_PER_QUEST;
     persist();
     renderTasks();
+    await battleHit(t);
     await wait(180);
   }
   cancelAnimationFrame(attackRaf);
+  await battleFinish();
   $('#attackScreen').classList.remove('active');
   renderXP();
 }
