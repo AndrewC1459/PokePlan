@@ -65,7 +65,10 @@ const UPDATES = [
       'Pokédex: the team screen counts how many different wild Pokémon you’ve caught.',
       'Bonus catches: after the daily catch, a bonus wild Pokémon appears. Finish 3 more quests that day to catch it, up to 3 bonus catches a day.',
       'Exp. Share: your lead gets full XP and the rest of the party gets half. Caught Pokémon level up and evolve (Magikarp → Gyarados!).',
-      'Coming next in 2.0: new biomes and new attack animations for every type.',
+      'Four new biomes: Frosted Tundra (Ice), Summit Dojo (Fighting), Iron Works (Steel) and Fairy Glade (Fairy), each with its own scenery and wild Pokémon. Lead with one of those types to visit.',
+      '42 new wild Pokémon live in the new biomes, from Snorunt and Riolu to Lapras, plus the rare Articuno and Registeel. Your Pokédex now has 185 to find.',
+      'Fixed thin dark lines that could show across the sky in some biomes.',
+      'Coming next in 2.0: new attack animations for every type.',
     ],
   },
   {

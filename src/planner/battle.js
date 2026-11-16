@@ -19,8 +19,11 @@ import { makeMon, PARTY_SIZE, recordDex, xpForLevel } from './team.js';
 export const BONUS_HP = 3;
 export const MAX_BONUS = 3;
 
-// Legendary birds and strong final stages turn up less often.
-export const RARITY = { 144: 0.08, 145: 0.08, 146: 0.08, 149: 0.25, 142: 0.3, 373: 0.25, 130: 0.4, 6: 0.3 };
+// Legendaries and strong or special Pokémon turn up less often.
+export const RARITY = {
+  144: 0.08, 145: 0.08, 146: 0.08, 379: 0.08, // legendaries
+  149: 0.25, 142: 0.3, 373: 0.25, 130: 0.4, 6: 0.3, 131: 0.3, 113: 0.3, 374: 0.3, 447: 0.4, 214: 0.5,
+};
 export const rarityOf = id => RARITY[id] ?? 1;
 
 // Small, stable string hash (FNV-1a), so the same day always gives the same Pokémon.

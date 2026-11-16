@@ -124,13 +124,12 @@ export function isSameOrLaterStage(earlier, later) {
 }
 
 // ---- Biomes: your lead's types decide where you are ----------------------------------------
-// Biome keys match the scenery in the game scripts. Types without a biome of their own yet borrow
-// the closest one.
+// Biome keys match the scenery in the game scripts (02, 09 and 09b-new-biomes.js).
 export const TYPE_BIOMES = {
   normal: ['meadow'], grass: ['meadow', 'forest'], bug: ['forest'], water: ['river', 'beach'],
   electric: ['storm'], fire: ['volcano', 'cave'], flying: ['sky'], ground: ['desert'],
   rock: ['canyon', 'cave'], dragon: ['canyon'], ghost: ['haunted', 'graveyard'], psychic: ['ruins'],
-  poison: ['marsh'], dark: ['crystal'], ice: ['river'], fighting: ['canyon'], steel: ['cave'], fairy: ['meadow'],
+  poison: ['marsh'], dark: ['crystal'], ice: ['tundra'], fighting: ['dojo'], steel: ['foundry'], fairy: ['glade'],
 };
 // Starters keep the five biomes they always had, so nobody loses a place they could visit before.
 export const STARTER_BIOMES = {

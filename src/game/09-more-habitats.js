@@ -102,7 +102,8 @@
     wctx.imageSmoothingEnabled = false;
     wctx.clearRect(0, 0, Wd, Ht);
     const snap = n => Math.round(n / g) * g;
-    const rect = (x, y, w, h, c) => { wctx.fillStyle = c; wctx.fillRect(Math.round(x * sx), Math.round(y * sy), Math.max(1, Math.round(w * sx)), Math.max(1, Math.round(h * sy))); };
+    // Round the edges, not the size, so neighbouring blocks always meet (no 1px gaps between bands).
+    const rect = (x, y, w, h, c) => { const X = Math.round(x * sx), Y = Math.round(y * sy); wctx.fillStyle = c; wctx.fillRect(X, Y, Math.max(1, Math.round((x + w) * sx) - X), Math.max(1, Math.round((y + h) * sy) - Y)); };
     const poly = (pts, c) => { wctx.beginPath(); wctx.moveTo(snap(pts[0][0]) * sx, snap(pts[0][1]) * sy); for (let i = 1; i < pts.length; i++) wctx.lineTo(snap(pts[i][0]) * sx, snap(pts[i][1]) * sy); wctx.closePath(); wctx.fillStyle = c; wctx.fill(); };
     const ridge = (y, amp, phase, c, step = 16) => { const pts = [[0, 360]]; for (let x = 0; x <= 640; x += step) pts.push([x, y + Math.sin(x * .018 + phase) * amp + Math.sin(x * .043 + phase * .7) * amp * .22]); pts.push([640, 360]); poly(pts, c); };
     const cloud = (x, y, k, c) => { rect(x, y, 38 * k, 8 * k, c); rect(x + 8 * k, y - 8 * k, 23 * k, 8 * k, c); rect(x + 23 * k, y + 8 * k, 25 * k, 5 * k, c); };
