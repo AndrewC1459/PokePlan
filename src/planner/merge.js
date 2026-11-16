@@ -6,6 +6,8 @@
 // copy, since that is the edit being saved right now; XP takes the larger value so no device's
 // earned XP is lost.
 
+import { isSameOrLaterStage } from './team.js';
+
 function mergeById(localItems = [], remoteItems = [], deleted = {}) {
   const byId = new Map();
   for (const item of remoteItems) if (item?.id) byId.set(item.id, item);
@@ -29,6 +31,18 @@ function mergeById(localItems = [], remoteItems = [], deleted = {}) {
   return result;
 }
 
+// Pokémon merge item by item too, but progress is never lost: XP takes the larger value and the
+// species takes the later evolution, whichever copy is newer.
+function mergeMons(localMons = [], remoteMons = [], deleted = {}) {
+  const all = [...remoteMons, ...localMons];
+  return mergeById(localMons, remoteMons, deleted).map(mon => {
+    const copies = all.filter(m => m?.id === mon.id);
+    const xp = Math.max(...copies.map(m => Number(m.xp) || 0));
+    const species = copies.reduce((best, m) => (isSameOrLaterStage(best, m.species) ? m.species : best), mon.species);
+    return xp === mon.xp && species === mon.species ? mon : { ...mon, xp, species };
+  });
+}
+
 export function mergeSaves(local, remote) {
   if (!remote || typeof remote !== 'object') return local;
   if (!local || typeof local !== 'object') return remote;
@@ -40,6 +54,7 @@ export function mergeSaves(local, remote) {
     xp: Math.max(Number(local.xp) || 0, Number(remote.xp) || 0),
     tasks: mergeById(local.tasks, remote.tasks, deleted),
     routines: mergeById(local.routines, remote.routines, deleted),
+    mons: mergeMons(local.mons, remote.mons, deleted),
     deleted,
   };
 }

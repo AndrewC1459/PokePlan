@@ -62,6 +62,8 @@ function persist() {
   if (!user || previewMode) return true;
   user.tasks = tasks;
   user.selectedDate = selectedDate;
+  // The partner card still edits user.form / xp / nickname directly; mirror them onto the starter.
+  if (user.pokemon) L.ensureTeam(user);
   const all = accounts(), key = accountKey(all, sessionEmail());
   if (!key) return false;
   all[key] = user;
@@ -71,6 +73,8 @@ function persist() {
 function normalizeUser() {
   if (!Array.isArray(user.routines)) user.routines = [];
   if (!user.deleted || typeof user.deleted !== 'object') user.deleted = {};
+  // 2.0: every save gets a team (mons + party), starting with the starter (src/planner/team.js).
+  return Boolean(user.pokemon) && L.ensureTeam(user);
 }
 
 function openAccount(email) {
@@ -89,10 +93,10 @@ function openAccount(email) {
 function showApp() {
   pokemon = user.pokemon;
   tasks = Array.isArray(user.tasks) ? user.tasks : [];
-  normalizeUser();
+  const upgraded = normalizeUser();
   selectedDate = todayKey();
   selected.clear();
-  if (runRollover() || user.selectedDate !== selectedDate) persist();
+  if (runRollover() || upgraded || user.selectedDate !== selectedDate) persist();
   $('#authWrap').classList.add('hidden');
   $('#app').classList.remove('hidden');
   $('#trainerLabel').textContent = (user.name || 'TRAINER').toUpperCase();
@@ -914,7 +918,11 @@ async function animateQuests(ids) {
     $('#attackStage').classList.remove('hit');
     t.done = true;
     t.updatedAt = Date.now();
-    user.xp = (Number(user.xp) || 0) + XP_PER_QUEST;
+    // Exp. Share: the lead earns the full amount, the rest of the party half. The partner card still
+    // reads user.xp, so it follows the starter's total.
+    L.ensureTeam(user);
+    user.mons = L.awardXP(user.mons, user.party, XP_PER_QUEST).mons;
+    user.xp = user.mons.find(m => m.id === L.STARTER_ID)?.xp ?? (Number(user.xp) || 0) + XP_PER_QUEST;
     persist();
     renderTasks();
     await wait(180);

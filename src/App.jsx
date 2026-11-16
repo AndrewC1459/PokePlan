@@ -7,6 +7,7 @@ import AttackOverlay from './components/AttackOverlay.jsx';
 import { installCloudSync, restoreSession } from './cloudSync.js';
 import * as schedule from './planner/schedule.js';
 import { mergeSaves } from './planner/merge.js';
+import * as team from './planner/team.js';
 
 // The game systems still run as classic scripts sharing globals, loaded in file-name order.
 // 01-core.js holds accounts, quests, calendar and XP; later files add scenery and polish.
@@ -142,7 +143,7 @@ export default function App() {
     const injected = [];
     restoreSession().finally(() => {
       if (cancelled) return;
-      window.PlannerLogic = { ...schedule, mergeSaves };
+      window.PlannerLogic = { ...schedule, ...team, mergeSaves };
       for (const { name, source } of gameScripts) {
         const script = document.createElement('script');
         script.dataset.pokeplanLegacy = 'true';
