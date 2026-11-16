@@ -1,5 +1,6 @@
-// Update 2.0: daily wild battles. A wild Pokémon from the current biome appears each day; every quest
-// finished today is a hit, and clearing today's list knocks it out and catches it.
+// Update 2.0: wild battles. A wild Pokémon from the biome you're in appears each day; every quest
+// finished today is a hit, and clearing today's list knocks it out and catches it. After that, bonus
+// Pokémon appear: every few more quests finished that day catches another (see battle.js).
 // The rules live in src/planner/battle.js; this file draws the board strip, the wild target in the
 // attack screen, and the catch scene, through the battle hooks in 01-core.js.
 (() => {
@@ -7,80 +8,113 @@
   const nameOf = id => (L.speciesInfo(id)?.name || 'Pokémon').toUpperCase();
   const typesOf = id => (L.speciesInfo(id)?.types || []).map(t => t[0].toUpperCase() + t.slice(1)).join(' / ');
   const hpColor = f => (f > 0.5 ? 'high' : f > 0.2 ? 'mid' : 'low');
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+  const poolOf = biome => (habitatWildlife[pokemon]?.[biome] || []).map(([id]) => id);
+  // A lead whose type matches the biome makes rare Pokémon more likely.
+  const boosted = biome => { const lead = L.leadOf(user); return Boolean(lead) && L.leadMatches(lead.species, biome); };
 
   // Today's wild Pokémon comes from the biome on screen (see ensureEncounter for when it can change).
   function ensureToday() {
     if (!user?.pokemon || typeof habitatWildlife === 'undefined') return null;
-    const biome = activeBiome?.type || 'meadow';
-    const pool = (habitatWildlife[pokemon]?.[biome] || []).map(([id]) => id);
+    const biome = activeBiome?.type || 'meadow', today = todayKey();
     // Before the first hit today (and before a catch), moving biome brings that biome's Pokémon.
-    const fresh = !L.battleState(tasks, todayKey()).damage && !L.caughtToday(user.mons, todayKey());
-    if (L.ensureEncounter(user, todayKey(), biome, pool, fresh)) persist();
-    return user.encounter?.date === todayKey() ? user.encounter : null;
+    const fresh = !L.battleState(tasks, today).damage && !L.caughtToday(user.mons, today);
+    if (L.ensureEncounter(user, today, biome, poolOf(biome), fresh, boosted(biome))) persist();
+    return user.encounter?.date === today ? user.encounter : null;
+  }
+
+  // What today's quests are fighting: the daily Pokémon until it's caught, then the bonus ones.
+  // Returns { kind: 'daily' | 'bonus', number, species, hp, left } or null once the day is done.
+  function currentFight() {
+    const enc = ensureToday();
+    if (!enc) return null;
+    const today = todayKey();
+    if (!L.caughtToday(user.mons, today)) {
+      const s = L.battleState(tasks, today);
+      return { kind: 'daily', number: 0, species: enc.species, hp: s.hp, left: s.left };
+    }
+    const b = L.bonusState(tasks, user.mons, today);
+    if (!b || b.done) return null;
+    const biome = activeBiome?.type || 'meadow';
+    if (L.ensureBonus(user, today, b.index, biome, poolOf(biome), b.hits === 0, boosted(biome))) persist();
+    const slot = user.encounter.bonuses?.[b.index];
+    return slot ? { kind: 'bonus', number: b.index + 1, species: slot.species, hp: L.BONUS_HP, left: b.left } : null;
   }
 
   // ---- The strip under the list title -------------------------------------------------------
   function renderEncounter() {
     const box = $('#encounter'), enc = ensureToday();
     if (!box || !enc) { if (box) box.hidden = true; return; }
-    const today = todayKey(), caught = L.caughtToday(user.mons, today);
-    const { hp, left } = L.battleState(tasks, today), frac = hp ? left / hp : 1;
-    const level = L.levelFor(caught ? caught.xp : L.xpForLevel(L.wildLevel(enc.species)));
-    const status = caught
-      ? `Caught! ${nameOf(enc.species)} joined your ${user.party.includes(caught.id) ? 'party' : 'box'}. A new one appears tomorrow.`
-      : !hp ? 'Add quests for today to battle it.'
-        : `HP ${left}/${hp} · clear today’s list to catch it.`;
+    const today = todayKey(), daily = L.caughtToday(user.mons, today), fight = currentFight();
+    const bonus = daily ? L.bonusState(tasks, user.mons, today) : null;
+    const species = fight?.species ?? daily?.species ?? enc.species;
+    const frac = fight?.hp ? fight.left / fight.hp : fight ? 1 : 0;
+    let label, status;
+    if (fight?.kind === 'daily') {
+      label = `WILD ${nameOf(species)}`;
+      status = !fight.hp ? 'Add quests for today to battle it.' : `HP ${fight.left}/${fight.hp} · clear today’s list to catch it.`;
+    } else if (fight?.kind === 'bonus') {
+      label = `BONUS · WILD ${nameOf(species)}`;
+      status = `Bonus ${fight.number}/${L.MAX_BONUS}: finish ${plural(fight.left, 'more quest')} today to catch it. Already caught: ${nameOf(daily.species)}${bonus.caught ? ` +${bonus.caught}` : ''}.`;
+    } else {
+      label = nameOf(species);
+      status = `Caught ${nameOf(daily.species)} and all ${L.MAX_BONUS} bonus Pokémon today! New ones appear tomorrow.`;
+    }
     box.hidden = false;
-    box.className = 'encounter' + (caught ? ' caught' : '');
-    box.innerHTML = `<img class="enc-sprite" src="${wildSprite(enc.species)}" alt="">
+    box.className = 'encounter' + (fight ? '' : ' caught') + (fight?.kind === 'bonus' ? ' bonus' : '');
+    box.innerHTML = `<img class="enc-sprite" src="${wildSprite(species)}" alt="">
       <div class="enc-copy">
-        <div class="enc-top"><b>${caught ? '' : 'WILD '}${escapeHtml(nameOf(enc.species))}</b><span>Lv. ${level}</span>${caught ? '<span class="enc-badge">✓ CAUGHT</span>' : ''}</div>
-        <div class="hp-track ${hpColor(caught ? 0 : frac)}"><i style="width:${caught ? 0 : Math.round(frac * 100)}%"></i></div>
+        <div class="enc-top"><b>${escapeHtml(label)}</b><span>Lv. ${L.wildLevel(species)}</span>${fight ? '' : '<span class="enc-badge">✓ ALL CAUGHT</span>'}</div>
+        <div class="hp-track ${hpColor(frac)}"><i style="width:${Math.round(frac * 100)}%"></i></div>
         <small>${escapeHtml(status)}</small>
       </div>`;
-    box.querySelector('.enc-sprite').title = typesOf(enc.species);
+    box.querySelector('.enc-sprite').title = typesOf(species);
   }
   const renderTasksBeforeBattles = renderTasks;
   renderTasks = function () { renderTasksBeforeBattles(); renderEncounter(); };
 
   // ---- The attack screen --------------------------------------------------------------------
   const stage = $('#attackStage'), wild = $('#wildMon'), ball = $('#catchBall');
-  const fighting = t => {
-    const enc = ensureToday();
-    return enc && t.date === todayKey() && !L.caughtToday(user.mons, todayKey()) ? enc : null;
-  };
-  function showHp() {
-    const { hp, left } = L.battleState(tasks, todayKey()), frac = hp ? left / hp : 0;
+  let fightBefore = null; // the fight a quest was aimed at, to spot a knockout after the hit
+  function showHp(left, hp) {
+    const frac = hp ? left / hp : 0;
     $('#wildHp').querySelector('.hp-track').className = 'hp-track ' + hpColor(frac);
     $('#wildHpFill').style.width = Math.round(frac * 100) + '%';
     $('#wildHpText').textContent = `HP ${left}/${hp}`;
   }
 
   battleTarget = t => {
-    const enc = fighting(t);
-    stage.classList.toggle('wild-battle', Boolean(enc));
-    $('#wildHp').hidden = wild.hidden = !enc;
+    const fight = t.date === todayKey() ? currentFight() : null;
+    fightBefore = fight;
+    stage.classList.toggle('wild-battle', Boolean(fight));
+    $('#wildHp').hidden = wild.hidden = !fight;
     $('#targetTitle').textContent = t.title;
-    if (!enc) { $('#targetLabel').textContent = 'QUEST TARGET'; return; }
-    $('#targetLabel').textContent = `WILD ${nameOf(enc.species)} · Lv. ${L.wildLevel(enc.species)}`;
-    wild.src = wildSprite(enc.species);
+    if (!fight) { $('#targetLabel').textContent = 'QUEST TARGET'; return; }
+    $('#targetLabel').textContent = `${fight.kind === 'bonus' ? 'BONUS · ' : ''}WILD ${nameOf(fight.species)} · Lv. ${L.wildLevel(fight.species)}`;
+    wild.src = wildSprite(fight.species);
     wild.className = 'wild-mon';
-    showHp();
+    showHp(fight.left, fight.hp);
   };
 
   battleHit = async t => {
-    if (!fighting(t)) return;
-    showHp();
+    const before = fightBefore;
+    if (!before) return;
+    const today = todayKey();
+    // Knocked out if the daily list is now clear, or this bonus Pokémon's three hits are in.
+    const ko = before.kind === 'daily' ? L.battleState(tasks, today).cleared : (L.bonusState(tasks, user.mons, today)?.earned || 0) >= before.number;
+    showHp(ko ? 0 : Math.max(0, before.left - 1), before.hp);
     wild.classList.remove('hurt');
     void wild.offsetWidth;
     wild.classList.add('hurt');
-    if (L.battleState(tasks, todayKey()).cleared) {
+    if (ko) {
       await wait(350);
       wild.classList.add('fainted');
-      $('#attackCaption').textContent = `The wild ${nameOf(user.encounter.species)} is worn out!`;
+      $('#attackCaption').textContent = `The wild ${nameOf(before.species)} is worn out!`;
       await wait(900);
     }
   };
+
 
   // ---- Pixel-art balls -----------------------------------------------------------------------
   // Each ball is a 16×16 pixel grid drawn in code and shown at 2× with no smoothing, like the
@@ -159,12 +193,9 @@
     stars.forEach(({ s }) => s.remove());
   }
 
-  // Clearing the list catches it: throw, three wobbles, click.
-  battleFinish = async () => {
-    const enc = user.encounter, got = L.catchWild(user, tasks, todayKey());
-    if (!got) return;
-    persist();
-    const name = nameOf(enc.species), kind = got.mon.ball || 'poke', ballName = L.BALLS[kind] || 'Poké Ball';
+  // One catch: throw, three wobbles, click. `got` is a result from catchWild / catchBonus.
+  async function throwBall(got) {
+    const species = got.mon.species, name = nameOf(species), kind = got.mon.ball || 'poke', ballName = L.BALLS[kind] || 'Poké Ball';
     // Clear the last attack's sparks so the catch plays on a clean stage.
     actx.setTransform(1, 0, 0, 1, 0, 0);
     actx.clearRect(0, 0, attackCanvas.width, attackCanvas.height);
@@ -172,8 +203,9 @@
     const from = [W * 0.25, H * 0.62], to = [W * 0.78, H * 0.42], rest = [W * 0.78, H * 0.6];
     stage.classList.add('wild-battle', 'catching');
     $('#attackName').textContent = ballName.toUpperCase() + '!';
-    $('#attackCounter').textContent = '◓';
+    $('#attackCounter').textContent = got.number ? `BONUS ${got.number}` : '◓';
     $('#attackCaption').textContent = `You threw a ${ballName}!`;
+    wild.src = wildSprite(species);
     wild.hidden = false;
     wild.className = 'wild-mon';
     ball.hidden = false;
@@ -212,26 +244,42 @@
     ball.classList.remove('caught');
     wild.style.transition = wild.style.transform = wild.style.filter = '';
     stage.classList.remove('wild-battle', 'catching');
-    renderTasks();
+    // Its card is shown after the attack screen closes (see the animateQuests wrapper below).
     const level = L.levelFor(got.mon.xp), where = got.toParty ? `It joined your party (${user.party.length}/${L.PARTY_SIZE}).` : 'Your party is full, so it went to your box.';
-    // Shown after the attack screen closes (see the animateQuests wrapper below), before any evolutions.
-    catchCard = () => showAccountDialog({
-      title: `${name} joined your team!`,
-      message: `Lv. ${level} · ${typesOf(enc.species)}. ${where}`,
-      content: `<div class="catch-card"><img src="${wildSprite(enc.species)}" alt=""><p>${escapeHtml(got.mon.note)}<br><span class="catch-ball-note"><img src="${ballFrame(kind)}" alt=""> Caught with a ${escapeHtml(ballName)}</span></p></div>`,
+    catchCards.push(() => showAccountDialog({
+      title: `${got.number ? 'Bonus! ' : ''}${name} joined your team!`,
+      message: `Lv. ${level} · ${typesOf(species)}. ${where}`,
+      content: `<div class="catch-card"><img src="${wildSprite(species)}" alt=""><p>${escapeHtml(got.mon.note)}<br><span class="catch-ball-note"><img src="${ballFrame(kind)}" alt=""> Caught with a ${escapeHtml(ballName)}</span></p></div>`,
       actions: [{ label: 'AWESOME', run: closeAccountDialog }],
-    });
+    }));
+  }
+
+  // After the quests: catch the daily Pokémon if the list is clear, then any knocked-out bonus ones.
+  battleFinish = async () => {
+    const today = todayKey(), daily = L.catchWild(user, tasks, today);
+    if (daily) { persist(); await throwBall(daily); }
+    const nextBonus = () => {
+      // A bonus knocked out on another device may not have been picked here yet.
+      const b = L.bonusState(tasks, user.mons, today), biome = activeBiome?.type || 'meadow';
+      if (b?.pending) L.ensureBonus(user, today, b.caught, biome, poolOf(biome), false, boosted(biome));
+      return L.catchBonus(user, tasks, today);
+    };
+    for (let got = nextBonus(); got; got = nextBonus()) {
+      persist();
+      await throwBall(got);
+    }
+    renderTasks();
   };
 
-  // The catch card waits for the attack screen to close, and later steps wait for the card.
-  let catchCard = null;
+  // Catch cards wait for the attack screen to close, one at a time, and later steps (evolutions) wait for them.
+  let catchCards = [];
   const animateBeforeCatch = animateQuests;
   animateQuests = async function (ids) {
-    catchCard = null;
+    catchCards = [];
     await animateBeforeCatch(ids);
-    const show = catchCard;
-    catchCard = null;
-    if (show) await whenClosed(show());
+    const cards = catchCards;
+    catchCards = [];
+    for (const show of cards) await whenClosed(show());
   };
 
   if (user) renderTasks();

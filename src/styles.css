@@ -201,3 +201,24 @@
 .evolve-scene img{width:120px;height:120px;object-fit:contain;image-rendering:pixelated}
 .evolve-scene img.silhouette{filter:brightness(0) invert(1) drop-shadow(0 0 6px #ffe9a8)}
 @media(max-width:450px){.team-row{flex-wrap:wrap}.team-actions{width:100%;justify-content:flex-end}}
+/* 2.0 bonus battles and the world map. */
+.encounter.bonus{background:#fbf3d8}
+.encounter.bonus .enc-top b{color:#8a5d1c}
+.account-dialog-card.map-card{width:min(760px,100%);max-height:90vh;overflow:auto}
+.map-head{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;margin-bottom:10px}
+.map-head b{font:9px 'Press Start 2P',monospace;color:#3f4b3c}
+.map-head span{font:16px VT323,monospace;color:#7c856f}
+.map-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.map-biome{display:grid;gap:4px;align-content:start;padding:8px 9px;border:2px solid #e2dbc3;background:#fffef7}
+.map-biome.here{border-color:#d29e42;background:#fff7dc}
+.map-top{display:flex;gap:6px;align-items:baseline}
+.map-top b{font:8px 'Press Start 2P',monospace;line-height:1.5;color:#293448}
+.map-star{color:#d29e42;font-size:14px;line-height:1}
+.map-count{margin-left:auto;font:16px VT323,monospace;color:#526248}
+.map-biome small{font:14px VT323,monospace;color:#8b927f}
+.map-dex{display:flex;flex-wrap:wrap;gap:2px;min-height:32px}
+.map-dex img{width:30px;height:30px;object-fit:contain;image-rendering:pixelated}
+.map-dex img.unseen{filter:brightness(0);opacity:.28}
+.map-biome button{justify-self:start;border:2px solid #b9a77d;background:#f7f0d9;color:#5d4a2c;padding:3px 9px;font:15px VT323,monospace;cursor:pointer}
+.map-biome button:hover{background:#425e43;border-color:#425e43;color:#fff8db}
+.map-here{justify-self:start;font:15px VT323,monospace;color:#9c7330}

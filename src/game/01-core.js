@@ -927,6 +927,7 @@ async function animateQuests(ids) {
     await wait(350);
     $('#attackStage').classList.remove('hit');
     t.done = true;
+    t.doneAt = Date.now();
     t.updatedAt = Date.now();
     // Exp. Share: the lead earns the full amount, the rest of the party half. The partner card still
     // reads user.xp, so it follows the starter's total.

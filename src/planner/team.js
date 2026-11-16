@@ -63,8 +63,19 @@ export function syncStarter(user, now = Date.now()) {
   return true;
 }
 
+// The Pokédex: every species the trainer has caught or evolved into, with the first date.
+// user.dex = { [dexNumber]: 'YYYY-MM-DD' }. Kept even if that Pokémon later evolves.
+export function recordDex(user, species, date) {
+  if (!species) return false;
+  user.dex = user.dex && typeof user.dex === 'object' ? user.dex : {};
+  if (user.dex[species] && user.dex[species] <= date) return false;
+  user.dex = { ...user.dex, [species]: date };
+  return true;
+}
+
 // Make sure the save has a valid team: the starter's mon exists, and the party only lists owned mons,
-// once each, at most six, and is never empty. Returns true if anything changed.
+// once each, at most six, and is never empty. Also fills the Pokédex from the team for older saves.
+// Returns true if anything changed.
 export function ensureTeam(user, now = Date.now()) {
   let changed = syncStarter(user, now);
   if (!Array.isArray(user.mons)) { user.mons = []; changed = true; }
@@ -75,6 +86,7 @@ export function ensureTeam(user, now = Date.now()) {
     user.party = party;
     changed = true;
   }
+  for (const mon of user.mons) if (!user.dex?.[mon.species]) { recordDex(user, mon.species, mon.caughtOn || localDateKey(new Date(now))); changed = true; }
   return changed;
 }
 
@@ -134,9 +146,12 @@ export function leadOf(user) {
 }
 
 // The biome to show: the saved one if the lead can be there, otherwise the lead's first.
+// Every biome, for free travel.
+export const ALL_BIOMES = [...new Set(Object.values(STARTER_BIOMES).flat())];
+
+// The biome to show: wherever you travelled, or your lead's first biome if that's not a real place.
 export function currentBiome(user) {
-  const options = biomesFor(leadOf(user), user?.pokemon);
-  return options.includes(user?.biome) ? user.biome : options[0] || 'meadow';
+  return ALL_BIOMES.includes(user?.biome) ? user.biome : biomesFor(leadOf(user), user?.pokemon)[0] || 'meadow';
 }
 
 // ---- Moves for caught Pokémon (starters keep their own move lists) -------------------------

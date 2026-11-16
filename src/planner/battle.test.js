@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ballFor, battleState, catchWild, caughtToday, ensureEncounter, pickWild, rarityOf, wildLevel } from './battle.js';
+import { ballFor, battleState, biomeTypes, bonusState, catchBonus, catchWild, caughtToday, ensureBonus, ensureEncounter, leadMatches, MAX_BONUS, pickWild, rarityOf, wildLevel } from './battle.js';
 import { levelFor, PARTY_SIZE } from './team.js';
 import { mergeSaves } from './merge.js';
 
@@ -114,9 +114,85 @@ describe('moving biome before the first hit', () => {
     ensureEncounter(user, today, 'meadow', [16, 19]);
     expect(ensureEncounter(user, today, 'river', [129], false)).toBe(false);
     expect(ensureEncounter(user, today, 'river', [129], true)).toBe(true);
-    expect(user.encounter).toEqual({ date: today, species: 129, biome: 'river' });
+    expect(user.encounter).toMatchObject({ date: today, species: 129, biome: 'river' });
     const meadowPick = pickWild([16, 19], `${today}|meadow|a@b.c`);
     ensureEncounter(user, today, 'meadow', [16, 19], true);
     expect(user.encounter.species).toBe(meadowPick);
+  });
+});
+
+describe('type bonus', () => {
+  it('knows which biomes match a lead', () => {
+    expect(biomeTypes('river')).toEqual(['water', 'ice']);
+    expect(leadMatches(129, 'river')).toBe(true); // Magikarp
+    expect(leadMatches(129, 'volcano')).toBe(false);
+  });
+  it('makes rare Pokémon more likely without changing common ones', () => {
+    expect(rarityOf(145, true)).toBeCloseTo(0.2);
+    expect(rarityOf(16, true)).toBe(1);
+    const count = boosted => Array.from({ length: 3000 }, (_, i) => pickWild(pool, 'b' + i, boosted)).filter(id => id === 145).length;
+    expect(count(true)).toBeGreaterThan(count(false) * 1.5);
+  });
+});
+
+describe('bonus catches', () => {
+  const done = (id, doneAt) => ({ id, title: id, date: today, done: true, doneAt });
+  const open = id => ({ id, title: id, date: today, done: false });
+  const caughtDay = () => {
+    const user = { email: 'a@b.c', mons: [], party: [], encounter: { date: today, species: 16, biome: 'meadow' } };
+    const list = [done('a', 10), done('b', 20)];
+    catchWild(user, list, today, 100);
+    return { user, list };
+  };
+
+  it('only start after the daily catch', () => {
+    expect(bonusState([done('a', 10), open('b')], [], today)).toBeNull();
+    const { user, list } = caughtDay();
+    expect(bonusState(list, user.mons, today)).toEqual({ index: 0, hits: 0, left: 3, earned: 0, caught: 0, pending: 0, done: false });
+  });
+
+  it('count quests finished after the daily catch, three per catch', () => {
+    const { user, list } = caughtDay();
+    ensureBonus(user, today, 0, 'river', [129]);
+    const more = [...list, done('c', 150), done('d', 160), open('e')];
+    expect(bonusState(more, user.mons, today)).toMatchObject({ index: 0, hits: 2, left: 1, pending: 0 });
+    expect(catchBonus(user, more, today, 200)).toBeNull();
+    more.push(done('f', 170));
+    expect(bonusState(more, user.mons, today)).toMatchObject({ index: 1, hits: 0, earned: 1, pending: 1 });
+    const got = catchBonus(user, more, today, 200);
+    expect(got).toMatchObject({ number: 1, toParty: true });
+    expect(got.mon).toMatchObject({ species: 129, bonus: 1, encounter: today, biome: 'river' });
+    expect(user.dex[129]).toBe(today);
+    expect(bonusState(more, user.mons, today)).toMatchObject({ caught: 1, pending: 0 });
+    expect(caughtToday(user.mons, today).species).toBe(16);
+  });
+
+  it('stop at the daily limit', () => {
+    const { user, list } = caughtDay();
+    const lots = [...list, ...Array.from({ length: 20 }, (_, i) => done('x' + i, 300 + i))];
+    expect(bonusState(lots, user.mons, today)).toMatchObject({ earned: MAX_BONUS, done: true, pending: MAX_BONUS });
+    for (let i = 0; i < MAX_BONUS; i++) { ensureBonus(user, today, i, 'meadow', pool); expect(catchBonus(user, lots, today, 400 + i)).toBeTruthy(); }
+    expect(catchBonus(user, lots, today, 500)).toBeNull();
+    expect(user.mons.filter(m => m.bonus).map(m => m.bonus)).toEqual([1, 2, 3]);
+  });
+
+  it('a bonus Pokémon can change with the biome until it is hit', () => {
+    const { user } = caughtDay();
+    ensureBonus(user, today, 0, 'meadow', [16]);
+    expect(ensureBonus(user, today, 0, 'river', [129], false)).toBe(false);
+    expect(ensureBonus(user, today, 0, 'river', [129], true)).toBe(true);
+    expect(user.encounter.bonuses[0]).toEqual({ species: 129, biome: 'river' });
+  });
+});
+
+describe('bonus variety', () => {
+  it('avoids Pokémon already met today when the biome has others', () => {
+    const user = { email: 'a@b.c', mons: [], party: [], encounter: { date: today, species: 16, biome: 'meadow', bonuses: [] } };
+    for (let i = 0; i < 3; i++) ensureBonus(user, today, i, 'meadow', [16, 19, 21, 43]);
+    const seen = [16, ...user.encounter.bonuses.map(b => b.species)];
+    expect(new Set(seen).size).toBe(4);
+    const only = { ...user, encounter: { date: today, species: 16, biome: 'x', bonuses: [] } };
+    ensureBonus(only, today, 0, 'x', [16]);
+    expect(only.encounter.bonuses[0].species).toBe(16);
   });
 });

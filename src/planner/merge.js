@@ -43,6 +43,13 @@ function mergeMons(localMons = [], remoteMons = [], deleted = {}) {
   });
 }
 
+// The Pokédex only grows: keep every species from both copies, with the earlier date.
+function mergeDex(a, b) {
+  const out = { ...(b || {}) };
+  for (const [id, date] of Object.entries(a || {})) if (!out[id] || date < out[id]) out[id] = date;
+  return out;
+}
+
 export function mergeSaves(local, remote) {
   if (!remote || typeof remote !== 'object') return local;
   if (!local || typeof local !== 'object') return remote;
@@ -55,6 +62,7 @@ export function mergeSaves(local, remote) {
     tasks: mergeById(local.tasks, remote.tasks, deleted),
     routines: mergeById(local.routines, remote.routines, deleted),
     mons: mergeMons(local.mons, remote.mons, deleted),
+    dex: mergeDex(local.dex, remote.dex),
     deleted,
   };
 }

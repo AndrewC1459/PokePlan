@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SPECIES } from './species.js';
 import {
   awardXP, biomesFor, bringToParty, currentBiome, ensureTeam, evolutionFor, evolveFully, isSameOrLaterStage, leadOf, levelFor,
-  makeMon, monName, moveFor, PARTY_SIZE, sendToBox, setLead, STARTER_ID, swapIn, syncStarter, xpForLevel,
+  makeMon, monName, moveFor, PARTY_SIZE, recordDex, sendToBox, setLead, STARTER_ID, swapIn, syncStarter, xpForLevel,
 } from './team.js';
 import { mergeSaves } from './merge.js';
 
@@ -134,11 +134,13 @@ describe('biomes from the lead', () => {
     expect(biomesFor({ species: 129 })).toEqual(['river', 'beach']);
     expect(biomesFor({ species: 25, starter: true }, 'pikachu')).toEqual(['meadow', 'forest', 'river', 'beach', 'storm']);
   });
-  it('keeps the saved biome only if the lead can be there', () => {
+  it('lets you travel anywhere, falling back to the lead’s first biome', () => {
     const user = { pokemon: 'pikachu', mons: [{ id: 'k', species: 129 }, { id: STARTER_ID, starter: true, species: 25 }], party: ['k', STARTER_ID], biome: 'beach' };
     expect(leadOf(user).id).toBe('k');
     expect(currentBiome(user)).toBe('beach');
     user.biome = 'storm';
+    expect(currentBiome(user)).toBe('storm');
+    user.biome = 'atlantis';
     expect(currentBiome(user)).toBe('river');
   });
 });
@@ -170,5 +172,22 @@ describe('party edits', () => {
     expect(evolveFully(mon)).toEqual([16, 17, 18]);
     expect(mon.species).toBe(18);
     expect(evolveFully({ species: 16, xp: 0 })).toEqual([16]);
+  });
+});
+
+describe('Pokédex', () => {
+  it('records each species once, keeping the earliest date', () => {
+    const user = {};
+    expect(recordDex(user, 16, '2026-11-12')).toBe(true);
+    expect(recordDex(user, 16, '2026-11-14')).toBe(false);
+    recordDex(user, 16, '2026-11-01');
+    expect(user.dex).toEqual({ 16: '2026-11-01' });
+  });
+  it('is filled from the team for older saves, and merges from both devices', () => {
+    const user = { pokemon: 'gengar', form: 'haunter', xp: 2600 };
+    ensureTeam(user, now);
+    expect(Object.keys(user.dex)).toEqual(['93']);
+    const merged = mergeSaves({ dex: { 16: '2026-11-05', 93: '2026-11-16' } }, { dex: { 16: '2026-11-02', 129: '2026-11-03' } });
+    expect(merged.dex).toEqual({ 16: '2026-11-02', 93: '2026-11-16', 129: '2026-11-03' });
   });
 });
