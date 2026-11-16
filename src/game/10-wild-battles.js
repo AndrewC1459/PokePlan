@@ -70,7 +70,33 @@
     box.querySelector('.enc-sprite').title = typesOf(species);
   }
   const renderTasksBeforeBattles = renderTasks;
-  renderTasks = function () { renderTasksBeforeBattles(); renderEncounter(); };
+  renderTasks = function () { renderTasksBeforeBattles(); renderEncounter(); queueLateCatch(); };
+
+  // The list can be cleared without a battle: deleting the last open quest when the rest are done,
+  // or finished quests arriving from another device. Play the catch then too, instead of leaving the
+  // Pokémon at 0 HP until the next quest.
+  let lateCatch = 0;
+  function queueLateCatch() {
+    clearTimeout(lateCatch);
+    lateCatch = setTimeout(async () => {
+      const today = todayKey();
+      if (!user || $('#attackScreen').classList.contains('active') || document.querySelector('.account-dialog')) return;
+      const dailyReady = user.encounter?.date === today && !L.caughtToday(user.mons, today) && L.battleState(tasks, today).cleared;
+      if (!dailyReady && !L.bonusState(tasks, user.mons, today)?.pending) return;
+      catchCards = [];
+      $('#attackScreen').classList.add('active');
+      $('#attacker').src = battler().sprite;
+      $('#targetLabel').textContent = 'WILD POKÉMON';
+      $('#targetTitle').textContent = 'Today’s list is clear!';
+      $('#wildHp').hidden = true;
+      await battleFinish();
+      $('#attackScreen').classList.remove('active');
+      renderXP();
+      const cards = catchCards;
+      catchCards = [];
+      for (const show of cards) await whenClosed(show());
+    }, 300);
+  }
 
   // ---- The attack screen --------------------------------------------------------------------
   const stage = $('#attackStage'), wild = $('#wildMon'), ball = $('#catchBall');

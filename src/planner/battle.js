@@ -84,6 +84,24 @@ export function battleState(tasks, today) {
   return { hp: list.length, damage, left: list.length - damage, cleared: list.length > 0 && damage === list.length };
 }
 
+// Quests finished after the daily catch that haven't been spent on a bonus catch yet, oldest first.
+// Each bonus catch stores the ids of the quests that knocked it out (`hitIds`), so deleting or
+// un-finishing those quests later can't roll progress back or let the same quests count twice.
+// A bonus caught before hitIds existed is taken to have used the oldest BONUS_HP quests.
+function unspentHits(tasks, mons, today) {
+  const daily = caughtToday(mons, today);
+  if (!daily) return null;
+  const since = Number(daily.caughtAt) || Infinity;
+  let fresh = (tasks || []).filter(t => t.date === today && t.done && (Number(t.doneAt) || 0) > since)
+    .sort((a, b) => (Number(a.doneAt) || 0) - (Number(b.doneAt) || 0));
+  const bonuses = (mons || []).filter(m => m.encounter === today && m.bonus).sort((a, b) => a.bonus - b.bonus);
+  for (const mon of bonuses) {
+    if (Array.isArray(mon.hitIds)) { const used = new Set(mon.hitIds); fresh = fresh.filter(t => !used.has(t.id)); }
+    else fresh = fresh.slice(BONUS_HP);
+  }
+  return { fresh, caught: bonuses.length };
+}
+
 // Bonus battles after the daily catch. Returns null before it, otherwise
 // { index, hits, left, earned, caught, pending, done } where `index` is the bonus being fought (0-based),
 // `earned` how many have been knocked out today, `pending` how many of those still need catching,
@@ -91,15 +109,13 @@ export function battleState(tasks, today) {
 // Only quests finished after the daily catch count. A daily catch without a catch time (from before
 // bonus catches existed) gets one from ensureTeam, so it starts counting from then.
 export function bonusState(tasks, mons, today) {
-  const daily = caughtToday(mons, today);
-  if (!daily) return null;
-  const since = Number(daily.caughtAt) || Infinity;
-  const progress = (tasks || []).filter(t => t.date === today && t.done && (Number(t.doneAt) || 0) > since).length;
-  const earned = Math.min(MAX_BONUS, Math.floor(progress / BONUS_HP));
-  const caught = (mons || []).filter(m => m.encounter === today && m.bonus).length;
+  const spent = unspentHits(tasks, mons, today);
+  if (!spent) return null;
+  const { fresh, caught } = spent;
+  const earned = Math.min(MAX_BONUS, caught + Math.floor(fresh.length / BONUS_HP));
   const done = earned >= MAX_BONUS;
-  const hits = done ? BONUS_HP : progress - earned * BONUS_HP;
-  return { index: Math.min(earned, MAX_BONUS - 1), hits, left: BONUS_HP - hits, earned, caught, pending: Math.max(0, earned - caught), done };
+  const hits = done ? BONUS_HP : fresh.length - (earned - caught) * BONUS_HP;
+  return { index: Math.min(earned, MAX_BONUS - 1), hits, left: BONUS_HP - hits, earned, caught, pending: earned - caught, done };
 }
 
 // The bonus Pokémon for slot `index`, picked at random when it first appears. It prefers species not
@@ -145,6 +161,7 @@ export function catchBonus(user, tasks, today, now = Date.now()) {
   if (!state?.pending) return null;
   const number = state.caught + 1, slot = user.encounter?.bonuses?.[number - 1];
   if (user.encounter?.date !== today || !slot) return null;
-  const got = addCatch(user, slot.species, slot.biome, today, `Bonus catch #${number}: ${BONUS_HP} more quests after clearing the list`, now, { bonus: number });
+  const hitIds = unspentHits(tasks, user.mons, today).fresh.slice(0, BONUS_HP).map(t => t.id);
+  const got = addCatch(user, slot.species, slot.biome, today, `Bonus catch #${number}: ${BONUS_HP} more quests after clearing the list`, now, { bonus: number, hitIds });
   return { ...got, number };
 }

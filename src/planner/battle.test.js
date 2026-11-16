@@ -156,6 +156,22 @@ describe('bonus catches', () => {
     expect(bonusState(more, user.mons, today)).toMatchObject({ hits: 2 });
   });
 
+  it('keep progress when quests behind a bonus catch are deleted or un-finished', () => {
+    const { user, list } = caughtDay();
+    ensureBonus(user, today, 0, [129]);
+    const more = [...list, done('c', 150), done('d', 150), done('e', 150)];
+    expect(catchBonus(user, more, today, 200).mon.hitIds).toEqual(['c', 'd', 'e']);
+    // Deleting the quests that earned it: still on bonus 2 with no hits, not back on bonus 1.
+    const cleared = list.slice();
+    expect(bonusState(cleared, user.mons, today)).toMatchObject({ index: 1, hits: 0, earned: 1, caught: 1, pending: 0 });
+    // Un-finishing them (undo) doesn't either, and new quests count straight away.
+    const undone = [...list, open('c'), open('d'), done('f', 300)];
+    expect(bonusState(undone, user.mons, today)).toMatchObject({ index: 1, hits: 1, caught: 1, pending: 0 });
+    // Finishing the same quests again doesn't count them twice.
+    const again = [...list, done('c', 310), done('d', 320), done('f', 300)];
+    expect(bonusState(again, user.mons, today)).toMatchObject({ index: 1, hits: 1, earned: 1, caught: 1, pending: 0 });
+  });
+
   it('work for a daily catch made before bonus catches existed', () => {
     const user = { pokemon: 'pikachu', xp: 0, mons: [{ id: 'old', species: 16, xp: 400, encounter: today, updatedAt: 5 }], party: ['old'] };
     expect(bonusState([done('c', 900)], user.mons, today).hits).toBe(0); // no catch time yet: nothing counts

@@ -121,8 +121,11 @@
     input.addEventListener('keydown', e => { if (e.key === 'Enter') save(dialog); });
     function save(shade) {
       const value = shade.querySelector('#monNickname').value.trim();
-      if (value) m.nickname = value; else delete m.nickname;
-      m.updatedAt = Date.now();
+      // Look it up again: a cloud sync while the dialog was open replaces the team's objects.
+      const mon = byId(m.id);
+      if (!mon) return closeAccountDialog();
+      if (value) mon.nickname = value; else delete mon.nickname;
+      mon.updatedAt = Date.now();
       persist();
       closeAccountDialog();
       renderPokemon();
