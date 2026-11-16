@@ -31,58 +31,23 @@
     drawResidents();
   };
 
-  // ---- World map: travel anywhere and see what lives there ----------------------------------
-  // Replaces the old CHANGE BIOME button (its listener cycled the starter's list).
-  const oldButton = $('#nextBiome'), mapButton = oldButton.cloneNode(true);
-  oldButton.replaceWith(mapButton);
+  // Replace the old button (its listener cycled the starter's list) with one that cycles the lead's biomes.
+  const oldButton = $('#nextBiome'), biomeButton = oldButton.cloneNode(true);
+  oldButton.replaceWith(biomeButton);
   function updateBiomeButton() {
-    mapButton.textContent = 'WORLD MAP ▸';
-    mapButton.title = 'Travel to any biome and see which Pokémon live there';
+    const options = L.biomesFor(lead(), pokemon), at = options.indexOf(L.currentBiome(user));
+    biomeButton.disabled = options.length < 2;
+    biomeButton.textContent = options.length < 2 ? 'ONLY BIOME' : `CHANGE BIOME ↻ ${at + 1}/${options.length}`;
+    biomeButton.title = options.length < 2 ? 'Lead with a different type of Pokémon to see other biomes.' : '';
   }
-  mapButton.addEventListener('click', () => openMap());
-
-  const poolIds = key => [...new Set((POOLS[key] || []).map(([id]) => id))].filter(id => L.speciesInfo(id));
-  const capital = t => t[0].toUpperCase() + t.slice(1);
-  function drawMap(view) {
-    const here = L.currentBiome(user), dex = user.dex || {}, leader = lead();
-    const all = [...new Set(L.ALL_BIOMES.flatMap(poolIds))];
-    const caughtAll = all.filter(id => dex[id]).length;
-    view.innerHTML = `<div class="map-head"><b>POKÉDEX ${caughtAll}/${all.length}</b><span>★ matches your lead’s type: rare Pokémon show up more often.</span></div>
-      <div class="map-grid">${L.ALL_BIOMES.filter(key => BIOMES[key]).map(key => {
-        const ids = poolIds(key), caught = ids.filter(id => dex[id]).length, star = leader && L.leadMatches(leader.species, key);
-        return `<div class="map-biome${key === here ? ' here' : ''}" data-biome="${key}">
-          <div class="map-top"><b>${escapeHtml(BIOMES[key].name)}</b>${star ? '<span class="map-star" title="Matches your lead’s type">★</span>' : ''}<span class="map-count">${caught}/${ids.length}</span></div>
-          <small>${escapeHtml(L.biomeTypes(key).slice(0, 3).map(capital).join(' · '))}</small>
-          <div class="map-dex">${ids.map(id => dex[id]
-            ? `<img src="/sprites/wildlife/${id}.gif" alt="${escapeHtml(L.speciesInfo(id).name)}" title="${escapeHtml(L.speciesInfo(id).name)}">`
-            : '<img class="unseen" src="/sprites/wildlife/' + id + '.gif" alt="Not caught yet" title="???">').join('')}</div>
-          ${key === here ? '<span class="map-here">YOU ARE HERE</span>' : '<button type="button" data-travel>TRAVEL</button>'}
-        </div>`;
-      }).join('')}</div>`;
-  }
-  function openMap() {
-    if (!user) return;
-    const dialog = showAccountDialog({ title: 'World map', message: '', content: '<div class="world-map" id="worldMap"></div>', actions: [{ label: 'DONE', run: closeAccountDialog }] });
-    dialog.querySelector('.account-dialog-card').classList.add('map-card');
-    const view = dialog.querySelector('#worldMap'), note = dialog.querySelector('.account-dialog-message');
-    drawMap(view);
-    view.addEventListener('click', e => {
-      const key = e.target.closest('[data-travel]') && e.target.closest('.map-biome')?.dataset.biome;
-      if (!key) return;
-      const before = JSON.stringify(user.encounter);
-      user.biome = key;
-      persist();
-      drawHabitat();
-      renderTasks();
-      const changed = JSON.stringify(user.encounter) !== before;
-      note.textContent = `You travelled to ${BIOMES[key].name}.` + (changed
-        ? ' A different wild Pokémon is waiting there!'
-        : ' Today’s wild Pokémon stays the same here: you’ve already battled or caught it.');
-      drawMap(view);
-      view.querySelector('.map-biome.here')?.scrollIntoView({ block: 'nearest' });
-    });
-  }
-  window.openWorldMap = openMap;
+  biomeButton.addEventListener('click', () => {
+    const options = L.biomesFor(lead(), pokemon);
+    if (options.length < 2) return;
+    user.biome = options[(options.indexOf(L.currentBiome(user)) + 1) % options.length];
+    persist();
+    drawHabitat();
+    renderTasks();
+  });
 
   // ---- The lead battles ------------------------------------------------------------------------
   // Until each type gets its own animation, borrow the closest of the three existing ones.
@@ -186,7 +151,9 @@
   }
   function drawTeam(view) {
     const party = user.party.map(byId).filter(Boolean), box = user.mons.filter(m => !user.party.includes(m.id));
-    view.innerHTML = `<h3>PARTY · ${party.length}/${L.PARTY_SIZE}</h3>
+    const wild = [...new Set(Object.values(POOLS).flat().map(([id]) => id))], dex = user.dex || {};
+    view.innerHTML = `<div class="team-dex"><b>POKÉDEX ${wild.filter(id => dex[id]).length}/${wild.length}</b><span>different wild Pokémon caught</span></div>
+      <h3>PARTY · ${party.length}/${L.PARTY_SIZE}</h3>
       <p class="team-hint">Your lead battles and picks the biome. The rest of the party gets half the XP (Exp. Share).</p>
       ${party.map((m, i) => teamRow(m, i, true)).join('')}
       <h3>BOX · ${box.length}</h3>

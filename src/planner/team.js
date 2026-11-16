@@ -86,7 +86,11 @@ export function ensureTeam(user, now = Date.now()) {
     user.party = party;
     changed = true;
   }
-  for (const mon of user.mons) if (!user.dex?.[mon.species]) { recordDex(user, mon.species, mon.caughtOn || localDateKey(new Date(now))); changed = true; }
+  for (const mon of user.mons) {
+    if (!user.dex?.[mon.species]) { recordDex(user, mon.species, mon.caughtOn || localDateKey(new Date(now))); changed = true; }
+    // Wild catches from before bonus catches had no catch time; bonus progress counts from now on.
+    if (mon.encounter && !mon.caughtAt) { mon.caughtAt = now; changed = true; }
+  }
   return changed;
 }
 
@@ -146,12 +150,9 @@ export function leadOf(user) {
 }
 
 // The biome to show: the saved one if the lead can be there, otherwise the lead's first.
-// Every biome, for free travel.
-export const ALL_BIOMES = [...new Set(Object.values(STARTER_BIOMES).flat())];
-
-// The biome to show: wherever you travelled, or your lead's first biome if that's not a real place.
 export function currentBiome(user) {
-  return ALL_BIOMES.includes(user?.biome) ? user.biome : biomesFor(leadOf(user), user?.pokemon)[0] || 'meadow';
+  const options = biomesFor(leadOf(user), user?.pokemon);
+  return options.includes(user?.biome) ? user.biome : options[0] || 'meadow';
 }
 
 // ---- Moves for caught Pokémon (starters keep their own move lists) -------------------------

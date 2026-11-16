@@ -134,13 +134,11 @@ describe('biomes from the lead', () => {
     expect(biomesFor({ species: 129 })).toEqual(['river', 'beach']);
     expect(biomesFor({ species: 25, starter: true }, 'pikachu')).toEqual(['meadow', 'forest', 'river', 'beach', 'storm']);
   });
-  it('lets you travel anywhere, falling back to the lead’s first biome', () => {
+  it('keeps the saved biome only if the lead can be there', () => {
     const user = { pokemon: 'pikachu', mons: [{ id: 'k', species: 129 }, { id: STARTER_ID, starter: true, species: 25 }], party: ['k', STARTER_ID], biome: 'beach' };
     expect(leadOf(user).id).toBe('k');
     expect(currentBiome(user)).toBe('beach');
     user.biome = 'storm';
-    expect(currentBiome(user)).toBe('storm');
-    user.biome = 'atlantis';
     expect(currentBiome(user)).toBe('river');
   });
 });

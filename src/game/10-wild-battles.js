@@ -1,4 +1,4 @@
-// Update 2.0: wild battles. A wild Pokémon from the biome you're in appears each day; every quest
+// Update 2.0: wild battles. A random wild Pokémon (from any biome) appears each day; every quest
 // finished today is a hit, and clearing today's list knocks it out and catches it. After that, bonus
 // Pokémon appear: every few more quests finished that day catches another (see battle.js).
 // The rules live in src/planner/battle.js; this file draws the board strip, the wild target in the
@@ -10,17 +10,16 @@
   const hpColor = f => (f > 0.5 ? 'high' : f > 0.2 ? 'mid' : 'low');
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-  const poolOf = biome => (habitatWildlife[pokemon]?.[biome] || []).map(([id]) => id);
-  // A lead whose type matches the biome makes rare Pokémon more likely.
-  const boosted = biome => { const lead = L.leadOf(user); return Boolean(lead) && L.leadMatches(lead.species, biome); };
+  // Every wild species in every biome; the daily and bonus Pokémon are picked from all of them.
+  let allWild = null;
+  const wildPool = () => (allWild ||= [...new Set(Object.values(habitatWildlife).flatMap(pools => Object.values(pools).flat().map(([id]) => id)))]);
+  const here = () => activeBiome?.type || '';
 
-  // Today's wild Pokémon comes from the biome on screen (see ensureEncounter for when it can change).
+  // Today's random wild Pokémon, picked once a day (the same on every device).
   function ensureToday() {
     if (!user?.pokemon || typeof habitatWildlife === 'undefined') return null;
-    const biome = activeBiome?.type || 'meadow', today = todayKey();
-    // Before the first hit today (and before a catch), moving biome brings that biome's Pokémon.
-    const fresh = !L.battleState(tasks, today).damage && !L.caughtToday(user.mons, today);
-    if (L.ensureEncounter(user, today, biome, poolOf(biome), fresh, boosted(biome))) persist();
+    const today = todayKey();
+    if (L.ensureEncounter(user, today, wildPool(), here())) persist();
     return user.encounter?.date === today ? user.encounter : null;
   }
 
@@ -36,8 +35,7 @@
     }
     const b = L.bonusState(tasks, user.mons, today);
     if (!b || b.done) return null;
-    const biome = activeBiome?.type || 'meadow';
-    if (L.ensureBonus(user, today, b.index, biome, poolOf(biome), b.hits === 0, boosted(biome))) persist();
+    if (L.ensureBonus(user, today, b.index, wildPool(), here())) persist();
     const slot = user.encounter.bonuses?.[b.index];
     return slot ? { kind: 'bonus', number: b.index + 1, species: slot.species, hp: L.BONUS_HP, left: b.left } : null;
   }
@@ -260,8 +258,8 @@
     if (daily) { persist(); await throwBall(daily); }
     const nextBonus = () => {
       // A bonus knocked out on another device may not have been picked here yet.
-      const b = L.bonusState(tasks, user.mons, today), biome = activeBiome?.type || 'meadow';
-      if (b?.pending) L.ensureBonus(user, today, b.caught, biome, poolOf(biome), false, boosted(biome));
+      const b = L.bonusState(tasks, user.mons, today);
+      if (b?.pending) L.ensureBonus(user, today, b.caught, wildPool(), here());
       return L.catchBonus(user, tasks, today);
     };
     for (let got = nextBonus(); got; got = nextBonus()) {

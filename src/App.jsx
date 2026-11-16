@@ -56,15 +56,13 @@ const UPDATES = [
   {
     version: '2.0',
     notes: [
-      'Wild battles: a wild Pokémon from your biome appears every day. Its HP is the number of quests on today’s list.',
+      'Wild battles: a random wild Pokémon appears every day, from any biome. Its HP is the number of quests on today’s list.',
       'Every quest you finish is a hit. Clear the whole list and you catch it! It joins your party (up to 6), or your box once the party is full.',
       'Didn’t clear the list? It just runs off, and a new one shows up tomorrow. Nothing is lost.',
       'Pixel Poké Balls: rarer Pokémon get fancier balls, from Poké Ball to Great, Ultra, and even Master Ball.',
       'Your team: tap PARTY on the partner card to see your party and box. Pick a LEAD, send Pokémon to the box, or bring them back.',
-      'Your lead battles with its own moves. Switching your lead takes you to a biome of its type: a Water lead to the river, a Fire lead to the volcano.',
-      'World map: tap WORLD MAP on the partner card to travel to any of the 15 biomes and see who lives there. Pokémon you’ve caught show in color; the rest are silhouettes. Your Pokédex counts them all.',
-      'Lead with a Pokémon whose type matches the biome (★ on the map) and rare Pokémon show up more often.',
-      'Travel before your first finished quest of the day and you’ll meet that biome’s wild Pokémon instead.',
+      'Your lead battles with its own moves and picks the scenery: a Water lead takes you to the river and shore, a Fire lead to the volcano. CHANGE BIOME switches between its biomes.',
+      'Pokédex: the team screen counts how many different wild Pokémon you’ve caught.',
       'Bonus catches: after the daily catch, a bonus wild Pokémon appears. Finish 3 more quests that day to catch it, up to 3 bonus catches a day.',
       'Exp. Share: your lead gets full XP and the rest of the party gets half. Caught Pokémon level up and evolve (Magikarp → Gyarados!).',
       'Coming next in 2.0: new biomes and new attack animations for every type.',
