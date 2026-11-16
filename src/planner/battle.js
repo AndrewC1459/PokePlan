@@ -37,9 +37,23 @@ export function wildLevel(species) {
   return Math.max(5, reachedAt[species] || 0);
 }
 
-// Today's wild Pokémon, chosen once per day and then kept even if the biome changes later.
-export function ensureEncounter(user, today, biome, pool) {
-  if (user.encounter?.date === today) return false;
+// Which ball the catch uses, by how special the Pokémon is: legendaries get a Master Ball, rare ones or
+// strong final stages an Ultra Ball, uncommon or evolved ones a Great Ball, everyone else a Poké Ball.
+export const BALLS = { poke: 'Poké Ball', great: 'Great Ball', ultra: 'Ultra Ball', master: 'Master Ball' };
+export function ballFor(species) {
+  const rarity = rarityOf(species), level = wildLevel(species);
+  if (rarity <= 0.1) return 'master';
+  if (rarity <= 0.3 || level >= 36) return 'ultra';
+  if (rarity < 1 || level >= 18) return 'great';
+  return 'poke';
+}
+
+// Today's wild Pokémon, chosen once per day. Moving to another biome before the first hit swaps it for
+// that biome's Pokémon (pass canMove); after a hit or a catch it stays. Each biome's pick is fixed for
+// the day, so moving back and forth can't reroll it.
+export function ensureEncounter(user, today, biome, pool, canMove = false) {
+  const enc = user.encounter;
+  if (enc?.date === today && (enc.biome === biome || !canMove)) return false;
   const species = pickWild(pool || [], `${today}|${biome}|${user.email || user.name || ''}`);
   if (!species) return false;
   user.encounter = { date: today, species, biome };
@@ -71,6 +85,7 @@ export function catchWild(user, tasks, today, now = Date.now()) {
     }, now),
     encounter: today,
     biome: enc.biome,
+    ball: ballFor(enc.species),
   };
   user.mons = [...(user.mons || []), mon];
   const toParty = (user.party || []).length < PARTY_SIZE;

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { SPECIES } from './species.js';
-import { awardXP, ensureTeam, evolutionFor, isSameOrLaterStage, levelFor, makeMon, monName, PARTY_SIZE, STARTER_ID, syncStarter, xpForLevel } from './team.js';
+import {
+  awardXP, biomesFor, bringToParty, currentBiome, ensureTeam, evolutionFor, evolveFully, isSameOrLaterStage, leadOf, levelFor,
+  makeMon, monName, moveFor, PARTY_SIZE, sendToBox, setLead, STARTER_ID, swapIn, syncStarter, xpForLevel,
+} from './team.js';
 import { mergeSaves } from './merge.js';
 
 const now = new Date(2026, 10, 16, 12).getTime();
@@ -122,5 +125,50 @@ describe('merging Pokémon from two devices', () => {
     const a = { pokemon: 'gengar', xp: 300 }, b = { pokemon: 'gengar', xp: 300 };
     ensureTeam(a, now); ensureTeam(b, now + 50);
     expect(mergeSaves(a, b).mons.filter(m => m.starter)).toHaveLength(1);
+  });
+});
+
+describe('biomes from the lead', () => {
+  it('follows the lead’s types, and starters keep their old biomes too', () => {
+    expect(biomesFor({ species: 6 })).toEqual(['volcano', 'cave', 'sky']); // Charizard: fire / flying
+    expect(biomesFor({ species: 129 })).toEqual(['river', 'beach']);
+    expect(biomesFor({ species: 25, starter: true }, 'pikachu')).toEqual(['meadow', 'forest', 'river', 'beach', 'storm']);
+  });
+  it('keeps the saved biome only if the lead can be there', () => {
+    const user = { pokemon: 'pikachu', mons: [{ id: 'k', species: 129 }, { id: STARTER_ID, starter: true, species: 25 }], party: ['k', STARTER_ID], biome: 'beach' };
+    expect(leadOf(user).id).toBe('k');
+    expect(currentBiome(user)).toBe('beach');
+    user.biome = 'storm';
+    expect(currentBiome(user)).toBe('river');
+  });
+});
+
+describe('moves', () => {
+  it('grow stronger at levels 20 and 40', () => {
+    expect(moveFor({ species: 129, xp: 0 })).toBe('WATER GUN!');
+    expect(moveFor({ species: 129, xp: xpForLevel(20) })).toBe('BUBBLE BEAM!');
+    expect(moveFor({ species: 41, xp: xpForLevel(45) })).toBe('GUNK SHOT!');
+  });
+});
+
+describe('party edits', () => {
+  const party = ['a', 'b', 'c'];
+  it('moves the lead to the front', () => {
+    expect(setLead(party, 'c')).toEqual(['c', 'a', 'b']);
+    expect(setLead(party, 'z')).toBe(party);
+  });
+  it('never empties the party or overfills it', () => {
+    expect(sendToBox(party, 'b')).toEqual(['a', 'c']);
+    expect(sendToBox(['a'], 'a')).toEqual(['a']);
+    expect(bringToParty(party, 'd')).toEqual(['a', 'b', 'c', 'd']);
+    const full = ['1', '2', '3', '4', '5', '6'];
+    expect(bringToParty(full, '7')).toBe(full);
+    expect(swapIn(full, '3', '7')).toEqual(['1', '2', '7', '4', '5', '6']);
+  });
+  it('evolves as far as the level allows', () => {
+    const mon = { species: 16, xp: xpForLevel(40) };
+    expect(evolveFully(mon)).toEqual([16, 17, 18]);
+    expect(mon.species).toBe(18);
+    expect(evolveFully({ species: 16, xp: 0 })).toEqual([16]);
   });
 });

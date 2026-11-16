@@ -897,6 +897,10 @@ let drawMove = () => {};
 let battleTarget = t => { $('#targetTitle').textContent = t.title; };
 let battleHit = () => {};
 let battleFinish = async () => {};
+// Who attacks: the starter by default; 11-team.js swaps in the party lead. Returns { name, sprite, move, type }.
+let battler = () => P[pokemon];
+// Level changes from the last batch of quests ({ id, fromLevel, toLevel, evolvesTo }), for 11-team.js.
+let questGains = [];
 
 async function animateQuests(ids) {
   const targets = ids.map(id => tasks.find(t => t.id === id)).filter(t => t && !t.done);
@@ -906,7 +910,7 @@ async function animateQuests(ids) {
   selected.clear();
   $('#bulkbar').classList.remove('show');
   for (let i = 0; i < targets.length; i++) {
-    const t = targets[i], p = P[pokemon];
+    const t = targets[i], p = battler();
     $('#attackScreen').classList.add('active');
     $('#attacker').src = p.sprite;
     $('#attackName').textContent = p.move;
@@ -917,7 +921,8 @@ async function animateQuests(ids) {
     window.attackStart = performance.now();
     attackRaf = requestAnimationFrame(() => drawMove(0, p.type));
     await wait(1250);
-    $('#attackCaption').textContent = `Direct hit! +${XP_PER_QUEST} XP`;
+    const shared = user.party?.length > 1 ? ` · team +${Math.round(XP_PER_QUEST * L.SHARE)}` : '';
+    $('#attackCaption').textContent = `Direct hit! +${XP_PER_QUEST} XP${shared}`;
     $('#attackStage').classList.add('hit');
     await wait(350);
     $('#attackStage').classList.remove('hit');
@@ -926,7 +931,9 @@ async function animateQuests(ids) {
     // Exp. Share: the lead earns the full amount, the rest of the party half. The partner card still
     // reads user.xp, so it follows the starter's total.
     L.ensureTeam(user);
-    user.mons = L.awardXP(user.mons, user.party, XP_PER_QUEST).mons;
+    const award = L.awardXP(user.mons, user.party, XP_PER_QUEST);
+    user.mons = award.mons;
+    questGains.push(...award.gains);
     user.xp = user.mons.find(m => m.id === L.STARTER_ID)?.xp ?? (Number(user.xp) || 0) + XP_PER_QUEST;
     persist();
     renderTasks();
@@ -942,6 +949,13 @@ $('#completeSelected').addEventListener('click', () => animateQuests([...selecte
 
 // ---------------------------------------------------------------------------------------------
 // Shared pop-up dialog used for confirmations across the app.
+
+// Resolves once a dialog from showAccountDialog has been closed (by a button, Escape, or a click outside).
+function whenClosed(shade) {
+  return new Promise(resolve => {
+    const check = setInterval(() => { if (!document.body.contains(shade)) { clearInterval(check); resolve(); } }, 120);
+  });
+}
 
 function closeAccountDialog() {
   document.querySelector('.account-dialog')?.remove();

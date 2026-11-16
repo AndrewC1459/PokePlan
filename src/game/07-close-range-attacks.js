@@ -24,5 +24,5 @@
     if(t<1500)attackRaf=requestAnimationFrame(()=>drawMove(performance.now()-window.attackStart,type));
     else{stage.classList.remove('physical-attack');attacker.style.removeProperty('--lunge-x')}
   }
-  drawMove=function(t,type){const move=String(P[pokemon]?.move||'').replaceAll('!','').trim().toUpperCase();if(!physicalMoves.has(move)){stage.classList.remove('physical-attack');attacker.style.removeProperty('--lunge-x');return projectileDraw(t,type)}stage.classList.add('physical-attack');return physicalFrame(t,type,move)};
+  drawMove=function(t,type){const move=String(battler()?.move||'').replaceAll('!','').trim().toUpperCase();if(!physicalMoves.has(move)){stage.classList.remove('physical-attack');attacker.style.removeProperty('--lunge-x');return projectileDraw(t,type)}stage.classList.add('physical-attack');return physicalFrame(t,type,move)};
 })();

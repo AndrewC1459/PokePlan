@@ -59,7 +59,12 @@ const UPDATES = [
       'Wild battles: a wild Pokémon from your biome appears every day. Its HP is the number of quests on today’s list.',
       'Every quest you finish is a hit. Clear the whole list and you catch it! It joins your party (up to 6), or your box once the party is full.',
       'Didn’t clear the list? It just runs off, and a new one shows up tomorrow. Nothing is lost.',
-      'Coming next in 2.0: managing your party, Exp. Share, a collection for every biome, new biomes, and new attack animations.',
+      'Pixel Poké Balls: rarer Pokémon get fancier balls, from Poké Ball to Great, Ultra, and even Master Ball.',
+      'Your team: tap PARTY on the partner card to see your party and box. Pick a LEAD, send Pokémon to the box, or bring them back.',
+      'Your lead battles with its own moves and decides the biome. A Water lead takes you to the river and shore, a Fire lead to the volcano. Starters keep all their old biomes too.',
+      'Switch biomes before your first finished quest of the day and you’ll meet that biome’s wild Pokémon instead.',
+      'Exp. Share: your lead gets full XP and the rest of the party gets half. Caught Pokémon level up and evolve (Magikarp → Gyarados!).',
+      'Coming next in 2.0: a collection for every biome, new biomes, and new attack animations for every type.',
     ],
   },
   {

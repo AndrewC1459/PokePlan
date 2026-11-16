@@ -155,18 +155,49 @@
 .wild-hp{display:grid;gap:3px;margin-top:7px}
 .wild-hp[hidden]{display:none}
 #wildHpText{font:15px VT323,monospace;color:#5e6b55;justify-self:end}
-.catch-ball{position:absolute;z-index:3;width:30px;height:30px;left:calc(25% - 15px);top:calc(62% - 15px);transform-origin:50% 85%}
-.catch-ball[hidden]{display:none}
-.catch-ball.thrown{animation:ballThrow .65s linear forwards}
-@keyframes ballThrow{0%{left:calc(25% - 15px);top:calc(62% - 15px);rotate:0deg}45%{top:calc(16% - 15px)}100%{left:calc(78% - 15px);top:calc(42% - 15px);rotate:900deg}}
-.catch-ball.landed{left:calc(78% - 15px);top:calc(60% - 15px);animation:ballDrop .45s cubic-bezier(.55,0,1,.45)}
-@keyframes ballDrop{from{top:calc(42% - 15px)}}
-.catch-ball.settled{left:calc(78% - 15px);top:calc(60% - 15px)}
-.catch-ball.wobble{animation:ballWobble .6s ease-in-out}
-@keyframes ballWobble{0%,100%{rotate:0deg}25%{rotate:-24deg}75%{rotate:24deg}}
-.catch-ball.caught{animation:ballClick .35s steps(2) 3;filter:drop-shadow(0 0 6px #ffe26b)}
-@keyframes ballClick{50%{filter:drop-shadow(0 0 12px #fff6b8) brightness(1.2)}}
 .catch-card{display:flex;align-items:center;gap:12px;margin:2px 0 4px}
 .catch-card img{flex:none;width:76px;height:76px;object-fit:contain;image-rendering:pixelated;background:#f1ead2;border:2px solid #d4c8a9}
 .account-dialog-card .catch-card p{margin:0;font:17px VT323,monospace}
 @media(max-width:450px){.encounter{padding:8px 10px;gap:9px}.enc-sprite{width:46px;height:46px}.wild-mon{width:80px;height:80px;left:calc(78% - 40px);top:calc(60% - 46px)}.wild-battle .target-card{max-width:50%}}
+/* Pixel-art Poké Balls (drawn in 10-wild-battles.js) and the catch sparkle. */
+.catch-ball{position:absolute;z-index:3;width:32px;height:32px;image-rendering:pixelated}
+.catch-ball[hidden]{display:none}
+.catch-ball.caught{filter:brightness(.82)}
+.catch-star{position:absolute;z-index:3;width:4px;height:4px;margin:-2px 0 0 -2px;background:#ffe26b;box-shadow:4px 0 #ffe26b,-4px 0 #ffe26b,0 4px #ffe26b,0 -4px #ffe26b,0 0 0 1px #fff6b8}
+.catch-card .catch-ball-note{display:inline-flex;align-items:center;gap:6px;margin-top:6px;color:#7b6a46}
+.catch-card .catch-ball-note img{width:16px;height:16px;border:0;background:none;image-rendering:pixelated}
+/* 2.0 team: party row on the partner card, the team screen, evolutions. */
+.companion.lead-caught .starter-badge{display:none}
+.party-strip{margin-top:11px;padding-top:9px;border-top:2px solid #e6e1ce;cursor:pointer}
+.party-strip:focus-visible{outline:3px solid #e4b94f;outline-offset:2px}
+.party-strip-top{display:flex;justify-content:space-between;align-items:baseline;font:8px 'Press Start 2P',monospace;color:#3f4b3c;margin-bottom:6px}
+.party-strip-top b{font:15px VT323,monospace;font-weight:400;color:#526248}
+.party-strip:hover .party-strip-top b{color:#2f4a33;text-decoration:underline}
+.party-slots{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+.party-slot{aspect-ratio:1;min-width:0;display:grid;place-items:center;background:#f2eedd;border:2px solid #ddd5bb;overflow:hidden}
+.party-slot img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated;transform:scale(1.25)}
+.party-slot.lead{border-color:#d29e42;background:#fff3cf}
+.party-slot.open-slot{background:repeating-linear-gradient(45deg,#f2eedd 0 4px,#ebe5cf 4px 8px)}
+.account-dialog-card.team-card{width:min(560px,100%);max-height:88vh;overflow:auto}
+.team-view h3{font:8px 'Press Start 2P',monospace;color:#3f4b3c;margin:14px 0 4px}
+.team-view h3:first-child{margin-top:0}
+.account-dialog-card .team-hint{font:16px VT323,monospace;color:#7c856f;margin:0 0 8px}
+.team-row{display:flex;align-items:center;gap:10px;padding:7px 8px;border:2px solid #e6e0c8;background:#fffef7;margin-bottom:6px}
+.team-row.is-lead{border-color:#d29e42;background:#fff7dc}
+.team-row>img{flex:none;width:52px;height:52px;object-fit:contain;image-rendering:pixelated;background:#f1ead2}
+.team-info{flex:1;min-width:0;display:grid;gap:3px}
+.team-name{display:flex;gap:8px;align-items:baseline;min-width:0}
+.team-name b{font:9px 'Press Start 2P',monospace;color:#293448;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.team-name span{font:16px VT323,monospace;color:#6c7660;white-space:nowrap}
+.team-info small{font:15px VT323,monospace;color:#7c856f}
+.team-xp{height:7px}
+.team-xp i{background:#5a8fd8}
+.team-actions{display:flex;gap:4px;flex:none;align-items:center}
+.team-actions button{border:2px solid #b9a77d;background:#f7f0d9;color:#5d4a2c;padding:4px 7px;font:15px VT323,monospace;cursor:pointer}
+.team-actions button:hover:not(:disabled){background:#425e43;border-color:#425e43;color:#fff8db}
+.team-actions button:disabled{opacity:.45;cursor:not-allowed}
+.team-lead-tag{font:15px VT323,monospace;color:#9c7330;padding:0 4px}
+.evolve-scene{display:grid;place-items:center;height:140px;background:radial-gradient(circle at 50% 60%,#fff6cf 0 30%,#f1ead2 60%);border:2px solid #d4c8a9;margin-bottom:8px}
+.evolve-scene img{width:120px;height:120px;object-fit:contain;image-rendering:pixelated}
+.evolve-scene img.silhouette{filter:brightness(0) invert(1) drop-shadow(0 0 6px #ffe9a8)}
+@media(max-width:450px){.team-row{flex-wrap:wrap}.team-actions{width:100%;justify-content:flex-end}}

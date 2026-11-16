@@ -106,3 +106,80 @@ export function isSameOrLaterStage(earlier, later) {
   for (let id = earlier, steps = 0; id && steps < 4; id = speciesInfo(id)?.evolvesTo, steps++) if (id === later) return true;
   return false;
 }
+
+// ---- Biomes: your lead's types decide where you are ----------------------------------------
+// Biome keys match the scenery in the game scripts. Types without a biome of their own yet borrow
+// the closest one.
+export const TYPE_BIOMES = {
+  normal: ['meadow'], grass: ['meadow', 'forest'], bug: ['forest'], water: ['river', 'beach'],
+  electric: ['storm'], fire: ['volcano', 'cave'], flying: ['sky'], ground: ['desert'],
+  rock: ['canyon', 'cave'], dragon: ['canyon'], ghost: ['haunted', 'graveyard'], psychic: ['ruins'],
+  poison: ['marsh'], dark: ['crystal'], ice: ['river'], fighting: ['canyon'], steel: ['cave'], fairy: ['meadow'],
+};
+// Starters keep the five biomes they always had, so nobody loses a place they could visit before.
+export const STARTER_BIOMES = {
+  pikachu: ['meadow', 'forest', 'river', 'beach', 'storm'],
+  charizard: ['volcano', 'sky', 'cave', 'desert', 'canyon'],
+  gengar: ['haunted', 'ruins', 'marsh', 'graveyard', 'crystal'],
+};
+
+export function biomesFor(mon, starterKey) {
+  const fromTypes = (speciesInfo(mon?.species)?.types || []).flatMap(t => TYPE_BIOMES[t] || []);
+  const home = mon?.starter ? STARTER_BIOMES[starterKey] || [] : [];
+  return [...new Set([...home, ...fromTypes])];
+}
+
+export function leadOf(user) {
+  return (user?.mons || []).find(m => m.id === user?.party?.[0]) || null;
+}
+
+// The biome to show: the saved one if the lead can be there, otherwise the lead's first.
+export function currentBiome(user) {
+  const options = biomesFor(leadOf(user), user?.pokemon);
+  return options.includes(user?.biome) ? user.biome : options[0] || 'meadow';
+}
+
+// ---- Moves for caught Pokémon (starters keep their own move lists) -------------------------
+export const TYPE_MOVES = {
+  normal: ['TACKLE!', 'HEADBUTT!', 'HYPER BEAM!'], fire: ['EMBER!', 'FLAMETHROWER!', 'FIRE BLAST!'],
+  water: ['WATER GUN!', 'BUBBLE BEAM!', 'HYDRO PUMP!'], grass: ['VINE WHIP!', 'RAZOR LEAF!', 'SOLAR BEAM!'],
+  electric: ['THUNDER SHOCK!', 'THUNDERBOLT!', 'THUNDER!'], ice: ['POWDER SNOW!', 'ICE BEAM!', 'BLIZZARD!'],
+  fighting: ['KARATE CHOP!', 'BRICK BREAK!', 'CLOSE COMBAT!'], poison: ['POISON STING!', 'SLUDGE BOMB!', 'GUNK SHOT!'],
+  ground: ['MUD-SLAP!', 'DIG!', 'EARTHQUAKE!'], flying: ['GUST!', 'WING ATTACK!', 'HURRICANE!'],
+  psychic: ['CONFUSION!', 'PSYBEAM!', 'PSYCHIC!'], bug: ['BUG BITE!', 'X-SCISSOR!', 'MEGAHORN!'],
+  rock: ['ROCK THROW!', 'ROCK SLIDE!', 'STONE EDGE!'], ghost: ['ASTONISH!', 'SHADOW BALL!', 'PHANTOM FORCE!'],
+  dragon: ['TWISTER!', 'DRAGON PULSE!', 'DRAGON RUSH!'], dark: ['BITE!', 'CRUNCH!', 'DARK PULSE!'],
+  steel: ['METAL CLAW!', 'IRON HEAD!', 'FLASH CANNON!'], fairy: ['FAIRY WIND!', 'DRAINING KISS!', 'MOONBLAST!'],
+};
+export const MOVE_LEVELS = [1, 20, 40];
+export function moveFor(mon) {
+  const type = speciesInfo(mon?.species)?.types?.[0] || 'normal', level = levelFor(mon?.xp);
+  const list = TYPE_MOVES[type] || TYPE_MOVES.normal;
+  return list[MOVE_LEVELS.filter(at => level >= at).length - 1];
+}
+
+// ---- Party and box -------------------------------------------------------------------------
+// Each returns a new party list (lead first), or the same list if the move isn't allowed.
+export function setLead(party, id) {
+  return party.includes(id) ? [id, ...party.filter(x => x !== id)] : party;
+}
+export function sendToBox(party, id) {
+  return party.length > 1 && party.includes(id) ? party.filter(x => x !== id) : party;
+}
+export function bringToParty(party, id) {
+  return party.length < PARTY_SIZE && !party.includes(id) ? [...party, id] : party;
+}
+// Swap a party member with a boxed one, keeping its slot.
+export function swapIn(party, outId, inId) {
+  return party.includes(outId) && !party.includes(inId) ? party.map(x => (x === outId ? inId : x)) : party;
+}
+
+// Evolve a caught mon as far as its level allows. Returns the steps taken, e.g. [16, 17, 18].
+export function evolveFully(mon) {
+  const steps = [mon.species];
+  for (let next = evolutionFor(mon); next && steps.length < 4; next = evolutionFor(mon)) {
+    mon.species = next;
+    steps.push(next);
+  }
+  return steps;
+}

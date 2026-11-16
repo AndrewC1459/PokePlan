@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { battleState, catchWild, caughtToday, ensureEncounter, pickWild, rarityOf, wildLevel } from './battle.js';
+import { ballFor, battleState, catchWild, caughtToday, ensureEncounter, pickWild, rarityOf, wildLevel } from './battle.js';
 import { levelFor, PARTY_SIZE } from './team.js';
 import { mergeSaves } from './merge.js';
 
@@ -90,5 +90,33 @@ describe('catchWild', () => {
     const merged = mergeSaves(laptop, phone);
     expect(caughtToday(merged.mons, today)).toBeTruthy();
     expect(catchWild(merged, [quest('a', true)], today, 6)).toBeNull();
+  });
+});
+
+describe('ballFor', () => {
+  it('picks fancier balls for rarer and stronger Pokémon', () => {
+    expect(ballFor(16)).toBe('poke'); // Pidgey
+    expect(ballFor(17)).toBe('great'); // Pidgeotto, met at 18
+    expect(ballFor(130)).toBe('great'); // Gyarados, uncommon
+    expect(ballFor(18)).toBe('ultra'); // Pidgeot, met at 36
+    expect(ballFor(149)).toBe('ultra'); // Dragonite, rare
+    expect(ballFor(145)).toBe('master'); // Zapdos, legendary
+  });
+  it('is remembered on the caught Pokémon', () => {
+    const user = { mons: [], party: [], encounter: { date: today, species: 145, biome: 'storm' } };
+    expect(catchWild(user, [quest('a', true)], today).mon.ball).toBe('master');
+  });
+});
+
+describe('moving biome before the first hit', () => {
+  it('swaps today’s Pokémon only when allowed, and each biome’s pick stays fixed', () => {
+    const user = { email: 'a@b.c' };
+    ensureEncounter(user, today, 'meadow', [16, 19]);
+    expect(ensureEncounter(user, today, 'river', [129], false)).toBe(false);
+    expect(ensureEncounter(user, today, 'river', [129], true)).toBe(true);
+    expect(user.encounter).toEqual({ date: today, species: 129, biome: 'river' });
+    const meadowPick = pickWild([16, 19], `${today}|meadow|a@b.c`);
+    ensureEncounter(user, today, 'meadow', [16, 19], true);
+    expect(user.encounter.species).toBe(meadowPick);
   });
 });
