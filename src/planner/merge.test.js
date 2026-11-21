@@ -44,4 +44,21 @@ describe('mergeSaves', () => {
     expect(mergeSaves(save, null)).toBe(save);
     expect(mergeSaves(null, save)).toBe(save);
   });
+
+  it('keeps a starter evolution made on the other device', () => {
+    const local = { pokemon: 'pikachu', form: 'pikachu', name: 'Ash' };
+    const remote = { pokemon: 'pikachu', form: 'raichu', thunderStoneUsed: true, name: 'Old' };
+    expect(mergeSaves(local, remote)).toMatchObject({ form: 'raichu', thunderStoneUsed: true, name: 'Ash' });
+  });
+
+  it('keeps the local starter form when it is the later stage', () => {
+    const merged = mergeSaves({ form: 'charmeleon' }, { form: 'charmander' });
+    expect(merged.form).toBe('charmeleon');
+  });
+
+  it('finishes a Haunter trade completed on the other device', () => {
+    const local = { form: 'haunter', tradePending: true, tradeOffered: true };
+    const remote = { form: 'gengar', tradePending: false, tradeOffered: true };
+    expect(mergeSaves(local, remote)).toMatchObject({ form: 'gengar', tradePending: false, tradeOffered: true });
+  });
 });

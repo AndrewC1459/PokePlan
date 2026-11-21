@@ -7,7 +7,7 @@
     {kind:'POKÉDEX FACT',text:'A healthy Charmander’s tail flame burns brightly.'},
     {kind:'POKÉDEX FACT',text:'Charmeleon’s burning tail raises the temperature around it.'},
     {kind:'POKÉDEX FACT',text:'One Pokédex entry says a room gets 5°C colder when Gengar is hiding in it.'},
-    {kind:'TRAINER TIP',text:'Every quest you clear gives your partner 25 XP.'},
+    {kind:'TRAINER TIP',text:'Every quest you clear gives your lead 25 XP, and the rest of your party half.'},
     {kind:'TRAINER TIP',text:'Your partner grows stronger as you clear quests and earn XP.'},
     {kind:'PARTNER NOTE',text:'Your partner is proud of every bit of progress you make.'},
     {kind:'PARTNER NOTE',text:'Small steps still move your adventure forward.'},
@@ -27,5 +27,5 @@
   }
   showRandomNote();setInterval(showRandomNote,12000);
   const badge=document.querySelector('.starter-badge');
-  if(badge){badge.textContent='♥ BONDED';badge.title='Your starter is locked to this account. Catching other Pokémon is not available yet.';badge.setAttribute('aria-label','Starter bonded; catching additional Pokémon is not available yet')}
+  if(badge){badge.textContent='♥ BONDED';badge.title='Your starter is locked to this account. Pokémon you catch join your party alongside it.';badge.setAttribute('aria-label','Starter bonded to this account')}
 })();

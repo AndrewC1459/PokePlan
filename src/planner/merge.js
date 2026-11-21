@@ -6,7 +6,7 @@
 // copy, since that is the edit being saved right now; XP takes the larger value so no device's
 // earned XP is lost.
 
-import { isSameOrLaterStage } from './team.js';
+import { FORM_SPECIES, isSameOrLaterStage } from './team.js';
 
 function mergeById(localItems = [], remoteItems = [], deleted = {}) {
   const byId = new Map();
@@ -50,6 +50,21 @@ function mergeDex(a, b) {
   return out;
 }
 
+// The starter's evolution lives in the legacy fields (`form` and its item/trade flags), which the
+// partner card reads and the starter's mon copies. Keep the later stage from either copy, so an
+// older device can't turn a Raichu back into a Pikachu.
+function mergeStarter(local, remote) {
+  const mine = FORM_SPECIES[local.form], theirs = FORM_SPECIES[remote.form];
+  const remoteAhead = theirs && (!mine || (mine !== theirs && isSameOrLaterStage(mine, theirs)));
+  const out = {};
+  if (remoteAhead) {
+    out.form = remote.form;
+    if ('tradePending' in remote) out.tradePending = remote.tradePending;
+  }
+  for (const flag of ['thunderStoneUsed', 'tradeOffered']) if (local[flag] || remote[flag]) out[flag] = true;
+  return out;
+}
+
 export function mergeSaves(local, remote) {
   if (!remote || typeof remote !== 'object') return local;
   if (!local || typeof local !== 'object') return remote;
@@ -58,6 +73,7 @@ export function mergeSaves(local, remote) {
   return {
     ...remote,
     ...local,
+    ...mergeStarter(local, remote),
     xp: Math.max(Number(local.xp) || 0, Number(remote.xp) || 0),
     tasks: mergeById(local.tasks, remote.tasks, deleted),
     routines: mergeById(local.routines, remote.routines, deleted),

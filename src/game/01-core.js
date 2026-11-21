@@ -148,6 +148,11 @@ function logout() {
   tasks = [];
   selected.clear();
   hideUndo();
+  // The next trainer on this browser starts with no partner picked.
+  starterPick = null;
+  document.querySelectorAll('.starter').forEach(x => x.classList.remove('active'));
+  $('#lockStarter').disabled = true;
+  $('#starterHint').textContent = 'Pick the partner you want to adventure with.';
   $('#app').classList.add('hidden');
   $('#authWrap').classList.remove('hidden');
   $('#starterPanel').classList.add('hidden');
@@ -358,7 +363,7 @@ function taskRow(t) {
     : `<input class="check" type="checkbox" aria-label="Select ${escapeHtml(t.title)}" ${selected.has(t.id) ? 'checked' : ''}>`}
     <div class="task-copy"><button class="task-title" type="button" title="Edit quest">${escapeHtml(t.title)}</button>
     <div class="task-meta"><span class="tag ${escapeHtml(category.toLowerCase())}">${escapeHtml(category)}</span>
-    <span class="time-badge">${when}</span>
+    <span class="time-badge">${escapeHtml(when)}</span>
     ${routine ? `<span class="repeat-badge" title="Repeating quest">↻ ${escapeHtml(L.repeatLabel(routine).toUpperCase())}</span>` : ''}
     ${t.carriedFrom && !t.done ? '<span class="carry-badge">CARRIED OVER</span>' : ''}</div></div>
     <div class="task-right"><span class="priority">${t.done ? 'FINISHED' : ''}</span>
@@ -621,6 +626,9 @@ function saveEdit(shade, task, routine) {
     if (!allDay && !time) return say('Pick a time, or choose All day.');
     if (checkSpan(time, end)) return say(checkSpan(time, end));
   }
+  // The date picker's minimum can be typed past; a quest moved into the past would vanish from view.
+  const newDate = routine ? null : field('editDate').value || task.date;
+  if (newDate && newDate !== task.date && newDate < todayKey()) return say('Pick today or a later day.');
   const before = snapshot(), now = Date.now(), fields = { title, category, allDay, time, end, updatedAt: now };
 
   if (routine) {
@@ -634,13 +642,12 @@ function saveEdit(shade, task, routine) {
       .filter(t => t.routineId !== routine.id || t.done || t.date < today || L.occursOn(updated, t.date))
       .map(t => (t.routineId === routine.id && !t.done && t.date >= today
         ? { ...t, title, category, ...L.routineTimes(updated, t.date), updatedAt: now } : t));
-    if (task.done) tasks = tasks.map(t => (t.id === task.id ? { ...t, title, category } : t));
+    if (task.done) tasks = tasks.map(t => (t.id === task.id ? { ...t, title, category, updatedAt: now } : t));
   } else {
-    const date = field('editDate').value || task.date;
     tasks = tasks.map(t => {
       if (t.id !== task.id) return t;
-      const next = { ...t, ...fields, date };
-      if (date !== task.date) delete next.carriedFrom;
+      const next = { ...t, ...fields, date: newDate };
+      if (newDate !== task.date) delete next.carriedFrom;
       return next;
     });
   }
@@ -720,7 +727,6 @@ $('#addForm').addEventListener('submit', e => {
     for (let i = 0, key = start; i < 366; i++, key = L.addDays(key, 1)) {
       if (L.occursOn(routine, key)) { selectedDate = key; break; }
     }
-    focusCalendar();
     showDate();
   } else {
     tasks.unshift({ id: L.makeId(), title, category, done: false, date: selectedDate, allDay, time, end, updatedAt: now });
@@ -756,7 +762,10 @@ function updateTodayLabel() {
 }
 updateTodayLabel();
 
+// Shows the picked day in the header, and keeps the calendar on the period that holds it (so the
+// arrows stay in step after a cloud reload or midnight moves the picked day).
 function showDate() {
+  focusCalendar();
   const d = L.dateFromKey(selectedDate);
   $('#dateBadge').textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase();
   $('#boardTitle').textContent = selectedDate === todayKey() ? "TODAY'S LIST" : 'QUEST LIST';
@@ -812,7 +821,6 @@ function pickDate(key) {
 
 // Arrows move the picked day by one day, week, or month, depending on the zoom.
 function moveCalendar(direction) {
-  offset += direction;
   const d = L.dateFromKey(selectedDate);
   if (view === 'day') d.setDate(d.getDate() + direction);
   else if (view === 'week') d.setDate(d.getDate() + direction * 7);
@@ -955,6 +963,15 @@ $('#completeSelected').addEventListener('click', () => animateQuests([...selecte
 function whenClosed(shade) {
   return new Promise(resolve => {
     const check = setInterval(() => { if (!document.body.contains(shade)) { clearInterval(check); resolve(); } }, 120);
+  });
+}
+
+// Resolves once nothing matching `selector` is on the page, e.g. the starter's evolution scene, so
+// catch cards and other pop-ups wait their turn instead of opening on top of it.
+function whenGone(selector) {
+  return new Promise(resolve => {
+    const check = () => (document.querySelector(selector) ? setTimeout(check, 120) : resolve());
+    check();
   });
 }
 

@@ -111,14 +111,31 @@ function friendlyError(err) {
   return message || 'Something went wrong. Please try again.';
 }
 
+// Signed in, but the cloud copy couldn't be fetched (offline, server down): open the copy cached in
+// this browser. With no known cloud stamp, the next save fetches the cloud copy and merges first,
+// so nothing newer is overwritten.
+function openCached(user) {
+  const email = user.email?.trim().toLowerCase();
+  const all = readLocal(), key = email && findKey(all, email);
+  if (!key) return false;
+  currentUserId = user.id;
+  currentEmail = email;
+  lastStamp = null;
+  localStorage.setItem(SESSION_KEY, key);
+  return true;
+}
+
 // Before the game scripts run: reopen a signed-in user's cloud save, if any.
 export async function restoreSession() {
   if (!supabase) return;
+  let user = null;
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) { await loadSave(session.user); return; }
+    user = session?.user || null;
+    if (user) { await loadSave(user); return; }
   } catch (err) {
     console.error('Poképlan: could not load cloud save', err);
+    if (user && openCached(user)) return;
   }
   // Not signed in to the cloud: don't auto-open a browser-only account.
   localStorage.removeItem(SESSION_KEY);

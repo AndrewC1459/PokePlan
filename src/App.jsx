@@ -71,6 +71,12 @@ const UPDATES = [
       'Fixed: deleting quests after a bonus catch no longer resets bonus progress.',
       'Fixed: deleting your last unfinished quest now catches the wild Pokémon right away.',
       'Fixed: patch notes and other pop-ups now scroll on short screens.',
+      'Fixed: an evolved starter (like Raichu) no longer turns back when another device’s older save is merged in.',
+      'Fixed: opening Poképlan with no connection now shows your saved quests instead of the log-in screen.',
+      'Fixed: a starter evolution and a catch card no longer open on top of each other.',
+      'Fixed: the calendar now stays on the picked day after syncing or at midnight.',
+      'Attack effects now grow with your lead’s level, not just your starter’s.',
+      'Press Escape to close the patch notes.',
       'Coming next in 2.0: new attack animations for every type.',
     ],
   },
@@ -132,6 +138,12 @@ function UpdateNotes() {
   const [version, setVersion] = useState(UPDATES[0].version);
   const update = UPDATES.find(u => u.version === version) || UPDATES[0];
   const openNotes = () => { setVersion(UPDATES[0].version); setOpen(true); };
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = event => { if (event.key === 'Escape') setOpen(false); };
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, [open]);
   return (
     <>
       <button className="update-notes-trigger" type="button" onClick={openNotes}>UPDATES</button>

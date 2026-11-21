@@ -55,7 +55,7 @@
   battler = () => {
     const m = caughtLead();
     if (!m) return P[pokemon];
-    return { name: nameOf(m), sprite: spriteOf(m), move: L.moveFor(m), type: ANIMATION[L.speciesInfo(m.species)?.types[0]] || 'ghost' };
+    return { name: nameOf(m), sprite: spriteOf(m), move: L.moveFor(m), level: L.levelFor(m.xp), type: ANIMATION[L.speciesInfo(m.species)?.types[0]] || 'ghost' };
   };
 
   // ---- Partner card: shows the lead, plus a row for the party -------------------------------
@@ -228,6 +228,7 @@
       m.updatedAt = Date.now();
       persist();
       renderPokemon();
+      await whenGone('.evolution-scene, .evo-overlay');
       await playEvolution(m, steps);
     }
     questGains = [];

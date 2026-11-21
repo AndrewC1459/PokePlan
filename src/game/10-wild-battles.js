@@ -83,6 +83,9 @@
       if (!user || $('#attackScreen').classList.contains('active') || document.querySelector('.account-dialog')) return;
       const dailyReady = user.encounter?.date === today && !L.caughtToday(user.mons, today) && L.battleState(tasks, today).cleared;
       if (!dailyReady && !L.bonusState(tasks, user.mons, today)?.pending) return;
+      // A catch can't be undone, so undoing the delete that cleared the list would keep the Pokémon
+      // and bring the quest back.
+      hideUndo();
       catchCards = [];
       $('#attackScreen').classList.add('active');
       $('#attacker').src = battler().sprite;
@@ -303,6 +306,8 @@
     await animateBeforeCatch(ids);
     const cards = catchCards;
     catchCards = [];
+    // A starter evolution (or its message) from the same quests plays first.
+    if (cards.length) await whenGone('.evolution-scene, .evo-overlay');
     for (const show of cards) await whenClosed(show());
   };
 

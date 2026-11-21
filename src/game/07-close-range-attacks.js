@@ -8,7 +8,7 @@
     const box=stage.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2),cw=Math.round(box.width*dpr),ch=Math.round(box.height*dpr);
     if(attackCanvas.width!==cw||attackCanvas.height!==ch){attackCanvas.width=cw;attackCanvas.height=ch}
     actx.setTransform(dpr,0,0,dpr,0,0);actx.clearRect(0,0,box.width,box.height);actx.imageSmoothingEnabled=false;
-    const W=box.width,H=box.height,grid=5,growth=Math.min(1,Math.max(0,(levelNow()-1)/49)),scale=.7+growth*.55,sx=W*.25,sy=H*.66,tx=W*.76,ty=H*.5;
+    const W=box.width,H=box.height,grid=5,growth=Math.min(1,Math.max(0,((battler()?.level??levelNow())-1)/49)),scale=.7+growth*.55,sx=W*.25,sy=H*.66,tx=W*.76,ty=H*.5;
     let dash=t<260?0:t<680?(t-260)/420:t<900?1-(t-680)/220:0;dash=Math.max(0,Math.min(1,dash));
     const lunge=Math.round(W*.39*dash);attacker.style.setProperty('--lunge-x',lunge+'px');attacker.style.setProperty('--attacker-scale',(.82+growth*.35).toFixed(2));attacker.style.setProperty('--attacker-brightness',(1+growth*.25).toFixed(2));
     const tile=(x,y,color,size=grid)=>{const block=Math.max(grid,Math.round(size/grid)*grid);actx.fillStyle=color;actx.fillRect(Math.round(x/grid)*grid,Math.round(y/grid)*grid,block,block)};
