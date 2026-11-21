@@ -771,13 +771,13 @@ function paintScene(ctx, type, W, H, t, { stage = false, frontCtx = null } = {})
 let stepResidents = () => {};
 
 (() => {
-  const FRAME_MS = 1000 / 15, still = matchMedia('(prefers-reduced-motion: reduce)');
+  // The scenery and wildlife always move (gently, at 15 fps), as the wildlife always has.
+  const FRAME_MS = 1000 / 15;
   const front = $('#worldFront'), fctx = front?.getContext('2d');
   let last = 0, shown = '';
   drawWorld = function () {
     const now = performance.now(), type = activeBiome?.type || 'meadow', key = `${type}:${world.width}x${world.height}`;
-    // Reduced motion: draw the scene once, without the moving parts.
-    if (key === shown && (still.matches || now - last < FRAME_MS)) return;
+    if (key === shown && now - last < FRAME_MS) return;
     last = now;
     shown = key;
     if (front && (front.width !== world.width || front.height !== world.height)) {
@@ -786,7 +786,7 @@ let stepResidents = () => {};
       front.style.width = world.style.width;
       front.style.height = world.style.height;
     }
-    const t = still.matches ? 0 : now / 1000;
+    const t = now / 1000;
     const g = paintScene(wctx, type, world.width, world.height, t, { frontCtx: fctx });
     stepResidents(t, g, worldPixel);
   };
