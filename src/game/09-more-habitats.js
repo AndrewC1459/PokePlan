@@ -50,89 +50,213 @@
     for (const [biome, list] of Object.entries(biomes)) habitatWildlife[starter][biome].push(...list);
   for (const id of [195, 270, 339, 550, 90, 116, 120, 222, 318]) waterSpeciesIds.add(id);
 
-  // ---- Wildlife roaming the scene (fewer on phones so the board stays readable) ----
-  // Each Pokémon keeps to a part of the scene that suits it, read from the scene itself
-  // (04-pixel-world.js): fliers and floaters in open sky, below any cave ceiling and above the tallest
-  // trees, pillars and buildings; walkers on the ground, in front of the land but behind the close-up
-  // props; swimmers half under the water. They move with the scenery at 30 fps, on its pixel grid.
-  let roamers = [], lastStep = null;
-  const SPRITE_SCALE = 1; // sprites show at their own size, like everywhere else in the app
+  // ---- Who lives where: fixes so every biome's wildlife fits the place --------------------------
+  // (Every species stays in at least one biome, so the Pokédex keeps the same total.)
+  const fixes = {
+    volcano: { drop: [41, 227] },          // no cave bats or steel birds over the volcano (Zubat, Skarmory)
+    sky: { drop: [41, 225] },              // Zubat lives in caves; Delibird belongs to the tundra
+    cave: { dropKind: [[74, W]] },         // Geodude was listed twice; it floats in the cave
+    forest: { kind: { 48: W } },           // Venonat walks
+    crystal: { kind: { 597: W } },         // Ferroseed clings to the rocks
+  };
+  for (const pools of Object.values(habitatWildlife)) {
+    for (const [biome, fix] of Object.entries(fixes)) {
+      const list = pools[biome];
+      if (!list) continue;
+      pools[biome] = list
+        .filter(([id, kind]) => !fix.drop?.includes(id) && !fix.dropKind?.some(([d, k]) => d === id && k === kind))
+        .map(([id, kind]) => [id, fix.kind?.[id] || kind]);
+    }
+  }
+
+  // ---- Wildlife roaming the scene ------------------------------------------------------------
+  // Pokémon come and go: each crosses the whole screen in its own part of the scene and leaves, and a
+  // few seconds later a new one (often a different species) enters from either side. Where they go
+  // comes from the scene itself (04-pixel-world.js):
+  //   fly / float – open sky, below any cave ceiling and above the tallest trees, pillars, buildings;
+  //   walk        – the ground, standing on it with a shadow, behind the close-up props;
+  //   swim        – half under the water, with a ripple.
+  // Perching Pokémon fly (or walk, if they can't fly). Positions follow the scenery's 30 fps frames.
+  const SPEED = { fly: [80, 130], float: [30, 48], walk: [36, 58], swim: [24, 38] }; // CSS px per second
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  let roamers = [], pool = [], lastT = null, lastStep = null;
+
+  // The visible part of each sprite (its first frame), so feet, shadows and ripples line up.
+  const bounds = new Map();
+  function measure(img) {
+    if (bounds.has(img.src)) return bounds.get(img.src);
+    const w = img.naturalWidth, h = img.naturalHeight, c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(img, 0, 0);
+    let top = h, bottom = -1, left = w, right = -1;
+    try {
+      const d = x.getImageData(0, 0, w, h).data;
+      for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
+        if (d[(yy * w + xx) * 4 + 3] < 40) continue;
+        if (yy < top) top = yy; if (yy > bottom) bottom = yy; if (xx < left) left = xx; if (xx > right) right = xx;
+      }
+    } catch { /* unreadable: use the whole frame */ }
+    const box = bottom < 0 ? { top: 0, bottom: h - 1, left: 0, right: w - 1 } : { top, bottom, left, right };
+    bounds.set(img.src, box);
+    return box;
+  }
+
+  // Pixel shadows and ripples, made once per width.
+  const marks = new Map();
+  const markSize = width => { const rx = Math.max(4, Math.round(width / 2)), ry = Math.max(2, Math.round(rx * 0.22)); return { rx, ry, w: rx * 2 + 2, h: ry * 2 + 2 }; };
+  function mark(kind, width, frame = 0) {
+    const key = `${kind}${width}:${frame}`;
+    if (!marks.has(key)) {
+      const { rx, ry } = markSize(width), p = new PixelKit.Pix(rx * 2 + 2, ry * 2 + 2);
+      if (kind === 'shadow') p.shape(0, 0, p.w, p.h, (x, y) => ((x + 0.5 - rx - 1) / rx) ** 2 + ((y + 0.5 - ry - 1) / ry) ** 2 <= 1, '#10182455');
+      else p.shape(0, 0, p.w, p.h, (x, y) => {
+        const d = ((x + 0.5 - rx - 1) / rx) ** 2 + ((y + 0.5 - ry - 1) / ry) ** 2;
+        return d <= 1 && d > 0.55 && (x + frame) % 3 !== 0;
+      }, '#e6f6ffcc');
+      marks.set(key, p.canvas().toDataURL());
+    }
+    return marks.get(key);
+  }
+
+  // A Pokémon not already on screen, with rare ones (legendaries, pseudo-legendaries) turning up less
+  // often, using the same rarity as wild battles (src/planner/battle.js).
+  function pick(avoid) {
+    const fresh = pool.filter(([id]) => !avoid.has(id)), from = fresh.length ? fresh : pool;
+    let roll = Math.random() * from.reduce((sum, [id]) => sum + L.rarityOf(id), 0);
+    for (const entry of from) if ((roll -= L.rarityOf(entry[0])) < 0) return entry;
+    return from[from.length - 1];
+  }
+
+  // (Re)start a roamer with a new Pokémon. onScreen: start somewhere on screen (when the scene opens)
+  // instead of entering from an edge after a short wait.
+  function launch(m, onScreen) {
+    const shown = new Set(roamers.filter(o => o !== m && o.id).map(o => o.id));
+    const [id, kind] = pick(shown);
+    Object.assign(m, {
+      id, kind, ready: false, x: null, onScreen, dir: Math.random() < 0.5 ? -1 : 1,
+      speed: rnd(...SPEED[kind]), lane: Math.random(), phase: Math.random() * 6,
+      wait: onScreen ? 0 : rnd(1.5, 6), pause: 0, nextPause: rnd(3, 9),
+      // About half the floaters (ghosts, Magnemite, Hoppip...) drift low over the ground instead of the sky.
+      low: kind === FL && Math.random() < 0.5, hover: rnd(10, 26),
+    });
+    m.el.className = 'roamer ' + kind;
+    m.el.style.visibility = 'hidden';
+    m.img.src = `/sprites/wildlife/${id}.gif`;
+  }
+
+  function makeRoamer() {
+    const el = document.createElement('div'), clip = document.createElement('div'), img = document.createElement('img');
+    const under = document.createElement('i');
+    clip.className = 'roamer-clip';
+    under.className = 'roamer-mark';
+    img.alt = '';
+    img.draggable = false;
+    clip.appendChild(img);
+    el.append(under, clip);
+    ambientLayer.appendChild(el);
+    const m = { el, clip, img, under };
+    img.addEventListener('load', () => { m.box = measure(img); m.ready = true; if (lastStep) stepResidents(...lastStep); });
+    img.addEventListener('error', () => { m.ready = false; m.wait = 1; m.failed = true; });
+    return m;
+  }
+
   drawResidents = function () {
     const biome = activeBiome?.type || 'meadow', key = pokemon + ':' + biome;
     if (wildlifeKey === key) return;
     wildlifeKey = key;
     ambientLayer.replaceChildren();
     roamers = [];
-    const count = window.innerWidth < 700 ? 5 : 8;
     const water = Boolean(sceneLayers(biome, world.width, world.height).g.water);
-    const candidates = (habitatWildlife[pokemon]?.[biome] || [])
-      .map(([id, kind]) => [id, kind === S || (water && waterSpeciesIds.has(id)) ? (water ? S : FL) : kind])
-      .filter(([, kind]) => kind !== 'perch');
-    const shuffled = [...candidates].sort(() => Math.random() - 0.5);
-    const pool = pokemon === 'charizard' && biome === 'volcano'
-      ? [[218, W], ...shuffled.filter(([id]) => id !== 218).slice(0, count - 1)]
-      : shuffled.slice(0, count);
-    pool.forEach(([id, kind], i) => {
-      const el = document.createElement('div'), img = document.createElement('img');
-      el.className = 'roamer ' + kind;
-      img.alt = '';
-      img.draggable = false;
-      img.src = `/sprites/wildlife/${id}.gif`;
-      img.addEventListener('error', () => { el.remove(); roamers = roamers.filter(m => m.el !== el); });
-      img.addEventListener('load', () => { el.style.visibility = ''; if (lastStep) stepResidents(...lastStep); });
-      el.style.visibility = 'hidden';
-      el.appendChild(img);
-      ambientLayer.appendChild(el);
-      // Stable random values per Pokémon: where it starts, which lane, how fast, which way.
-      roamers.push({ el, img, kind, a: Math.random(), b: (i + Math.random()) / pool.length, c: Math.random(), speed: 0.7 + Math.random() * 0.6, dir: i % 2 ? -1 : 1 });
+    pool = (habitatWildlife[pokemon]?.[biome] || []).map(([id, kind]) => {
+      if (kind === 'perch') kind = (L.speciesInfo(id)?.types || []).includes('flying') ? F : W;
+      if (kind === S || (water && waterSpeciesIds.has(id))) kind = water ? S : FL;
+      return [id, kind];
     });
+    if (!pool.length) return;
+    const count = Math.min(pool.length, window.innerWidth < 700 ? 4 : 8);
+    // Start spread out across the screen, each in its own stretch.
+    for (let i = 0; i < count; i++) { const m = makeRoamer(); roamers.push(m); launch(m, true); m.slot = (i + 0.1 + Math.random() * 0.8) / count; }
   };
 
   const lerp = (a, b, f) => a + (b - a) * f;
-  // Back and forth: 0 → 1 → 0 over one period, with the direction of travel.
-  const patrol = v => { const ph = PixelKit.wrap(v, 2); return ph < 1 ? [ph, 1] : [2 - ph, -1]; };
-
   stepResidents = function (t, g, P) {
     lastStep = [t, g, P];
+    const dt = lastT === null ? 0 : Math.max(0, Math.min(0.1, t - lastT));
+    lastT = t;
     const snap = v => Math.round(v / P) * P, vw = g.W * P;
     // Open sky (CSS px): below the ceiling and the top edge, above the tallest standing prop.
-    const skyTop = Math.max(g.ceiling + 4, g.H * 0.04) * P, skyBottom = Math.min(g.reach - 4, g.hz - 8) * P;
+    const skyTop = Math.max(g.ceiling + 6, g.H * 0.04) * P, skyBottom = Math.min(g.reach - 6, g.hz - 10) * P;
     // Ground: the lower part of the land, where the Pokémon are seen walking toward the viewer.
-    const ground = [lerp(g.hz, g.H, 0.45) * P, (g.H - 3) * P];
-    const water = g.water ? [lerp(g.water[0], g.water[1], 0.35) * P, (g.water[1] - 2) * P] : null;
+    const ground = [lerp(g.hz, g.H, 0.4) * P, (g.H - 4) * P];
+    const water = g.water ? [lerp(g.water[0], g.water[1], 0.4) * P, (g.water[1] - 3) * P] : ground;
     for (const m of roamers) {
-      const w = m.img.naturalWidth * SPRITE_SCALE, h = m.img.naturalHeight * SPRITE_SCALE;
-      if (!w) continue;
-      let x, y, dir, depth = 0;
-      if (m.kind === 'fly') {
-        // Across the whole screen and round again, bobbing gently.
-        const span = vw + w * 2, run = PixelKit.wrap(m.a * span + t * 65 * m.speed, span);
-        dir = m.dir;
-        x = dir > 0 ? run - w : vw + w - run - w;
-        y = lerp(skyTop, Math.max(skyTop, skyBottom - h), m.b) + Math.sin(t * 1.6 + m.c * 6) * 3 * P;
-      } else if (m.kind === 'float') {
-        // Hovering about one spot, drifting slowly.
-        const drift = Math.sin(t * 0.5 * m.speed + m.c * 6);
-        dir = Math.cos(t * 0.5 * m.speed + m.c * 6) > 0 ? 1 : -1;
-        x = m.a * (vw - w) + drift * 70;
-        y = lerp(skyTop, Math.max(skyTop, skyBottom - h), m.b) + Math.sin(t * 1.3 + m.c * 4) * 2 * P;
-      } else {
-        // Walking or swimming back and forth along a stretch of ground or water.
-        const band = m.kind === 'swim' && water ? water : ground, range = Math.min(vw * 0.4, 120 + m.c * 180);
-        const [f, d] = patrol(t * (m.kind === 'swim' ? 24 : 45) * m.speed / range + m.c * 2);
-        dir = d;
-        x = Math.max(0, Math.min(vw - w, m.a * (vw - w - range) + f * range));
-        const feet = lerp(band[0], band[1], m.b);
-        // Swimmers sit low in the water; walkers step (a one-pixel bob, like the sprites' own frames).
-        const shown = m.kind === 'swim' ? Math.round(h * 0.62) : h;
-        y = feet - shown - (m.kind === 'walk' && Math.floor(t * 6 + m.c * 4) % 2 ? P : 0);
-        m.el.style.height = m.kind === 'swim' ? shown + 'px' : '';
-        depth = Math.round(feet);
+      if (m.failed) { m.failed = false; launch(m, false); continue; }
+      if (!m.ready) continue;
+      if (m.wait > 0) { m.wait -= dt; continue; }
+      const w = m.img.naturalWidth, h = m.img.naturalHeight, box = m.box;
+      // Enter from the edge it's heading away from (or anywhere on screen when the scene opens).
+      if (m.x === null) m.x = m.onScreen ? (m.slot ?? Math.random()) * Math.max(0, vw - w) : m.dir > 0 ? -box.right - 2 : vw - box.left + 2;
+      // Walkers stop now and then for a moment.
+      if (m.kind === 'walk' && m.pause > 0) m.pause -= dt;
+      else {
+        m.x += m.dir * m.speed * dt;
+        if (m.kind === 'walk' && (m.nextPause -= dt) <= 0) { m.pause = rnd(1, 2.5); m.nextPause = rnd(4, 10); }
       }
-      m.el.style.transform = `translate(${snap(x)}px, ${snap(y)}px)`;
+      // Gone past the far edge: a new Pokémon takes its place after a short wait.
+      if ((m.dir > 0 && m.x + box.left > vw + 2) || (m.dir < 0 && m.x + box.right < -2)) { m.el.style.visibility = 'hidden'; launch(m, false); continue; }
+
+      const flipped = m.dir > 0; // the sprites face left
+      const mid = flipped ? w - (box.left + box.right) / 2 : (box.left + box.right) / 2, opaque = box.right - box.left + 1;
+      let y, depth = 0, markImg = '', markW = 0, clipH = '';
+      if (m.kind === 'float' && m.low) {
+        // Hovering low over the ground, with a faint shadow below.
+        const feet = Math.round(lerp(ground[0] - (ground[1] - ground[0]) * 0.3, ground[1], m.lane)), bob = Math.round(Math.sin(t * 1.4 + m.phase) * 4);
+        depth = feet;
+        y = feet - m.hover - box.bottom - 1 + bob;
+        markW = Math.round(opaque * 0.55);
+        markImg = mark('shadow', markW);
+        const ms = markSize(markW);
+        m.under.style.transform = `translate(${snap(mid - ms.w / 2)}px, ${snap(feet - y - ms.h / 2)}px)`;
+      } else if (m.kind === 'fly' || m.kind === 'float') {
+        const bob = m.kind === 'fly' ? Math.sin(t * 3 + m.phase) * 3 : Math.sin(t * 1.4 + m.phase) * 5;
+        const top = skyTop - box.top, bottom = Math.max(top, skyBottom - box.bottom - 1);
+        y = lerp(top, bottom, m.lane) + bob;
+      } else {
+        const band = m.kind === 'swim' ? water : ground, feet = Math.round(lerp(band[0], band[1], m.lane));
+        depth = feet;
+        if (m.kind === 'swim') {
+          // Show the top part of the Pokémon above the waterline, with a ripple around it.
+          const above = Math.round((box.bottom - box.top + 1) * 0.6) + box.top;
+          y = feet - above;
+          clipH = above + 'px';
+          markW = Math.round(opaque * 1.1);
+          markImg = mark('ripple', markW, Math.floor(t * 4) % 3);
+          const ms = markSize(markW);
+          m.under.style.transform = `translate(${snap(mid - ms.w / 2)}px, ${snap(above - ms.h / 2)}px)`;
+        } else {
+          // Stand on the ground: the lowest visible pixel sits on the feet line, over a small shadow.
+          const step = m.pause > 0 ? 0 : Math.floor(t * 6 + m.phase) % 2;
+          y = feet - box.bottom - 1 - step;
+          markW = Math.round(opaque * 0.8);
+          markImg = mark('shadow', markW);
+          const ms = markSize(markW);
+          m.under.style.transform = `translate(${snap(mid - ms.w / 2)}px, ${snap(box.bottom + 1 + step - ms.h / 2)}px)`;
+        }
+      }
+      m.clip.style.height = clipH;
+      if (m.under.dataset.src !== markImg) {
+        m.under.dataset.src = markImg;
+        m.under.style.backgroundImage = markImg ? `url(${markImg})` : '';
+        const ms = markSize(markW);
+        m.under.style.width = ms.w + 'px';
+        m.under.style.height = ms.h + 'px';
+      }
+      m.under.hidden = !markImg;
+      m.el.style.transform = `translate(${snap(m.x)}px, ${snap(y)}px)`;
       m.el.style.zIndex = String(depth);
-      // The sprites face left; flip them to walk or fly right.
-      m.img.style.transform = dir > 0 ? 'scaleX(-1)' : '';
+      m.img.style.transform = flipped ? 'scaleX(-1)' : '';
+      m.el.style.visibility = '';
     }
   };
 
@@ -144,7 +268,7 @@
     pad: ['#9c7c45', '#d1b273', '#e6cd8f', '#f6e6b8'],
     paintSky(p, g) {
       K.dome(p, r(g.W * 0.8), r(g.H * 0.13), 9 * g.k + 4, 9 * g.k + 4, ['#ffd25a', '#ffe580', '#fff4bf'], '#f6b847');
-      Fx.makeClouds(g, PAL.cloud, { n: Math.ceil(g.W / 170) + 2, y1: 0.24 });
+      Fx.makeClouds(g, PAL.cloud, { n: Math.ceil(g.Wu / 170) + 2, y1: 0.24 });
     },
     paint(p, g) {
       // Sea to the horizon, a wet shoreline, then sand.
@@ -164,9 +288,9 @@
         const d = y - shore - edge(x);
         return d < 2 ? '#ffffff' : d < 6 ? '#c9b47a' : '#e6cd8f';
       }, '#9c7c45');
-      for (let i = 0; i < g.W * (g.H - shore) * 0.004; i++) p.set(r(g.rand() * g.W), shore + 8 + r(g.rand() * (g.H - shore)), g.rand() > 0.5 ? '#d1b273' : '#f6e6b8');
+      for (let i = 0; i < g.W * (g.H - shore) * 0.004 / g.u; i++) p.set(r(g.rand() * g.W), shore + 8 + r(g.rand() * (g.H - shore)), g.rand() > 0.5 ? '#d1b273' : '#f6e6b8');
       // Shells and starfish.
-      for (let i = 0; i < g.W / 80; i++) {
+      for (let i = 0; i < g.Wu / 80; i++) {
         const x = r(g.rand() * g.W), y = shore + r((12 + g.rand() * 50) * g.k);
         if (g.rand() > 0.5) K.dome(p, x, y, 3, 2, ['#e08a7a', '#f6b6a6', '#ffe0d6'], '#9a4a40', { floor: y + 1 });
         else for (const [dx, dy] of [[0, -2], [-2, 0], [2, 0], [-1, 2], [1, 2], [0, 0], [0, -1]]) p.set(x + dx, y + dy, '#f08a3a');
@@ -194,13 +318,13 @@
     behind: (ctx, t, g) => Fx.clouds(ctx, t, g),
     front(ctx, t, g) {
       const [sea, shore] = g.sea;
-      Fx.shimmer(ctx, t, 0, sea + 2, g.W, shore - 3, ['#ffffff', '#b8e4f4'], Math.ceil(g.W / 14), 5);
+      Fx.shimmer(ctx, t, 0, sea + 2, g.W, shore - 3, ['#ffffff', '#b8e4f4'], Math.ceil(g.Wu / 14), 5);
       // Foam rolling in and out along the shoreline.
       const reach = Math.round((Math.sin(t * 1.2) + 1) * 2 * g.k);
-      for (let x = 0; x < g.W; x += 6) if (K.hash(x, Math.floor(t * 2)) > 0.25) Fx.dot(ctx, x, shore - 2 - reach + Math.sin(x * 0.04) * 2, 5, 1, '#ffffff');
+      for (let x = 0; x < g.W; x += 6 * g.px) if (K.hash(x, Math.floor(t * 2)) > 0.25) Fx.dot(ctx, x, shore - 2 * g.px - reach + Math.sin(x * 0.04) * 2, 5 * g.px, g.px, '#ffffff');
       Fx.each(3, 8, (i, a, b) => {
-        const x = K.wrap(a * g.W + t * (10 + b * 6), g.W + 20) - 10, y = g.H * (0.12 + b * 0.2), up = Math.floor(t * 3 + i) % 2;
-        Fx.dot(ctx, x - 2, y - up, 2, 1, '#ffffff'); Fx.dot(ctx, x, y, 1, 1, '#c9d6e0'); Fx.dot(ctx, x + 1, y - up, 2, 1, '#ffffff');
+        const x = K.wrap(a * g.W + t * (10 + b * 6) * g.u, g.W + 20 * g.u) - 10 * g.u, y = g.H * (0.12 + b * 0.2), up = Math.floor(t * 3 + i) % 2;
+        Fx.bird(ctx, x, y, up, '#ffffff', 2, '#c9d6e0');
       });
     },
   };
@@ -216,7 +340,7 @@
     },
     paint(p, g) {
       K.range(p, g.rand, { y: g.hz - r(6 * g.k), height: 34 * g.k, width: 110 * g.k, ramp: ['#1b2420', '#2e3d36', '#36473e', '#405247', '#4c6052'], round: true });
-      K.ground(p, g.rand, g.hz, ['#18241d', '#2f4a36', '#3a5841', '#4c6f52'], { tufts: 0.012 });
+      K.ground(p, g.rand, g.hz, ['#18241d', '#2f4a36', '#3a5841', '#4c6f52'], { u: g.u, tufts: 0.012 });
       // Tall grass clumps and old wooden poles with a sagging wire.
       for (let x = r(g.rand() * 30); x < g.W; x += r((18 + g.rand() * 26) * g.k)) {
         const y = g.hz + r((6 + g.rand() * (g.H - g.hz - 10) / g.k) * g.k);
@@ -243,13 +367,13 @@
         const end = g.hz - 4;
         while (y < end) {
           const nx = x + (K.hash(strike, y) - 0.5) * 16 * g.k, ny = Math.min(end, y + 10 * g.k);
-          for (let s = 0; s <= 6; s++) { const f = s / 6; Fx.dot(ctx, x + (nx - x) * f - 1, y + (ny - y) * f, 3, 2, '#fff3a8'); Fx.dot(ctx, x + (nx - x) * f, y + (ny - y) * f, 1, 2, '#ffffff'); }
+          for (let s = 0; s <= 6; s++) { const f = s / 6; Fx.blk(ctx, x + (nx - x) * f, y + (ny - y) * f, -1, 0, 3, 2, '#fff3a8'); Fx.blk(ctx, x + (nx - x) * f, y + (ny - y) * f, 0, 0, 1, 2, '#ffffff'); }
           x = nx; y = ny;
         }
         ctx.fillStyle = '#fff8dc22';
         ctx.fillRect(0, 0, g.W, g.H);
       }
-      Fx.fall(ctx, t, g, { n: Math.ceil(g.W / 6), seed: 2, vx: -40, vy: 220, colors: ['#9fb4d0', '#c6d4e6'], w: 1, h: 4 });
+      Fx.fall(ctx, t, g, { n: Math.ceil(g.Wu / 6), seed: 2, vx: -40, vy: 220, colors: ['#9fb4d0', '#c6d4e6'], w: 1, h: 4 });
     },
   };
 
@@ -263,10 +387,10 @@
         const w = r((40 + g.rand() * 40) * g.k), h = r((24 + g.rand() * 20) * g.k), y = g.hz - r(14 * g.k);
         K.poly(p, [[x - w, y + 2], [x - w + 8, y - h], [x + w - 6, y - h], [x + w, y + 2]], (xx, yy) => (yy < y - h + 2 ? '#e7a676' : xx < x ? '#c9805a' : '#b06d4c'), '#6e3a2c');
       }
-      K.range(p, g.rand, { y: g.hz + r(4 * g.k), height: 22 * g.k, width: 120 * g.k, ramp: ['#9c6a38', '#c98d4f', '#d69c5c', '#e6b06f', '#f6cf8f'], round: true });
-      const dunes = K.range(p, g.rand, { y: g.hz + r(36 * g.k), height: 26 * g.k, width: 150 * g.k, ramp: ['#9c6a38', '#d29a5a', '#e2ad6c', '#efc282', '#fbdca0'], round: true });
+      K.range(p, g.rand, { y: g.hz + r(4 * g.k), floor: g.hz + r(40 * g.k), height: 22 * g.k, width: 120 * g.k, ramp: ['#9c6a38', '#c98d4f', '#d69c5c', '#e6b06f', '#f6cf8f'], round: true });
+      const dunes = K.range(p, g.rand, { y: g.hz + r(36 * g.k), floor: g.H, height: 26 * g.k, width: 150 * g.k, ramp: ['#9c6a38', '#d29a5a', '#e2ad6c', '#efc282', '#fbdca0'], round: true });
       g.dunes = dunes;
-      for (let i = 0; i < g.W * g.H * 0.002; i++) { const x = r(g.rand() * g.W), y = dunes[Math.min(g.W - 1, x)] + 4 + r(g.rand() * 80); p.rect(x, y, 2, 1, '#d29a5a'); }
+      for (let i = 0; i < g.W * g.H * 0.002 / g.u; i++) { const x = r(g.rand() * g.W), y = dunes[Math.min(g.W - 1, x)] + 4 + r(g.rand() * 80); p.rect(x, y, 2, 1, '#d29a5a'); }
       const cactus = (x, base, h) => {
         p.tall(base - h);
         const w = Math.max(3, r(h * 0.22)), ramp = (xx, cx) => (xx < cx - w / 4 ? '#7ab55c' : xx > cx + w / 4 ? '#3f7a3c' : '#5a9a48');
@@ -282,9 +406,9 @@
       for (let x = r(g.rand() * 90); x < g.W; x += r((100 + g.rand() * 90) * g.k)) K.rock(p, x, dunes[Math.min(g.W - 1, x)] + r(30 * g.k), r(12 * g.k), r(6 * g.k), ['#6e3a2c', '#a8684a', '#c4825c', '#dba077', '#efc29a']);
     },
     front(ctx, t, g) {
-      Fx.fall(ctx, t, g, { n: Math.ceil(g.W / 12), seed: 6, vx: 50, vy: 3, colors: ['#f7dfae', '#e2ad6c'], w: 2, h: 1, y0: g.hz - 20, y1: g.H });
+      Fx.fall(ctx, t, g, { n: Math.ceil(g.Wu / 12), seed: 6, vx: 50, vy: 3, colors: ['#f7dfae', '#e2ad6c'], w: 2, h: 1, y0: g.hz - 20, y1: g.H });
       // Heat shimmer: short bright lines wobbling over the dunes.
-      Fx.each(10, 12, (i, a, b) => { if (Math.floor(t * 3 + i) % 2) Fx.dot(ctx, a * g.W + Math.sin(t * 3 + i) * 3, g.hz - 6 + b * 14, 10, 1, '#fff4d8'); });
+      Fx.each(10, 12, (i, a, b) => { if (Math.floor(t * 3 + i) % 2) Fx.blk(ctx, a * g.W + Math.sin(t * 3 + i) * 3 * g.u, g.hz + (b * 14 - 6) * g.u, 0, 0, 10, 1, '#fff4d8'); });
     },
   };
 
@@ -305,7 +429,7 @@
           return strata[Math.floor((y + Math.sin(x * 0.05) * 3) / (9 * g.k)) % strata.length];
         }, '#3e1a16');
       };
-      K.ground(p, g.rand, g.hz, ['#4a2418', '#8c4a34', '#a85e40', '#c47a52'], { tufts: 0.004, pebble: true });
+      K.ground(p, g.rand, g.hz, ['#4a2418', '#8c4a34', '#a85e40', '#c47a52'], { u: g.u, tufts: 0.004, pebble: true });
       const ry = g.hz + r((g.H - g.hz) * 0.45);
       g.river = [ry, ry + r(10 * g.k)];
       p.shape(0, ry - 2, g.W, ry + r(12 * g.k), (x, y) => y >= ry + Math.sin(x * 0.03) * 2 && y < ry + r(10 * g.k) + Math.sin(x * 0.03 + 1) * 2, (x, y) => (y < ry + 2 ? '#8fd0d8' : '#4e8ea0'), '#2a4a56');
@@ -313,11 +437,11 @@
       for (let x = r(g.W * 0.3); x < g.W * 0.75; x += r((60 + g.rand() * 70) * g.k)) K.rock(p, x, g.hz + r((6 + g.rand() * 16) * g.k), r(14 * g.k), r(8 * g.k), ['#4a2418', '#8c4a34', '#a85e40', '#c47a52', '#e09a6a']);
     },
     front(ctx, t, g) {
-      Fx.shimmer(ctx, t, g.W * 0.2, g.river[0] + 2, g.W * 0.8, g.river[1] - 1, ['#d8f4f8'], Math.ceil(g.W / 40), 8);
+      Fx.shimmer(ctx, t, g.W * 0.2, g.river[0] + 2, g.W * 0.8, g.river[1] - 1, ['#d8f4f8'], Math.ceil(g.Wu / 40), 8);
       // Birds of prey circling high up.
       Fx.each(3, 17, (i, a) => {
         const ang = t * 0.4 + i * 2.1, x = g.W * (0.35 + a * 0.3) + Math.cos(ang) * 30 * g.k, y = g.H * 0.2 + Math.sin(ang) * 10 * g.k, up = Math.floor(t * 3 + i) % 2;
-        Fx.dot(ctx, x - 3, y - up, 3, 1, '#3e1a1a'); Fx.dot(ctx, x, y, 1, 1, '#3e1a1a'); Fx.dot(ctx, x + 1, y - up, 3, 1, '#3e1a1a');
+        Fx.bird(ctx, x, y, up, '#3e1a1a', 3);
       });
     },
   };
@@ -326,7 +450,7 @@
     sky: ['#120f24', '#1c1734', '#272044', '#342a55', '#433466'],
     pad: ['#141225', '#2e2a45', '#3b3655', '#514a6e'],
     paintSky(p, g) {
-      for (let i = 0; i < g.W * g.hz * 0.002; i++) p.set(r(g.rand() * g.W), r(g.rand() * g.hz * 0.8), g.rand() > 0.7 ? '#fff6d8' : '#b9b4d8');
+      for (let i = 0; i < g.W * g.hz * 0.002 / g.u; i++) p.set(r(g.rand() * g.W), r(g.rand() * g.hz * 0.8), g.rand() > 0.7 ? '#fff6d8' : '#b9b4d8');
       const mx = r(g.W * 0.2), my = r(g.H * 0.15), mr = r(12 * g.k + 5);
       K.dome(p, mx, my, mr, mr, ['#c9c2a0', '#e8e1c0', '#fffbe6'], '#8f8a74');
       K.dome(p, mx + r(mr * 0.5), my - r(mr * 0.2), mr, mr, ['#1c1734', '#1c1734'], null);
@@ -338,7 +462,7 @@
       const fy = g.hz + r(2 * g.k), fh = r(16 * g.k);
       p.rect(0, fy - fh + 3, g.W, 1, '#161422'); p.rect(0, fy - 4, g.W, 1, '#161422');
       for (let x = 2; x < g.W; x += r(6 * g.k) + 2) { p.rect(x, fy - fh, 1, fh, '#2c2840'); p.set(x, fy - fh - 1, '#4a4466'); }
-      K.ground(p, g.rand, g.hz + 2, ['#0c0a18', '#1d1a2e', '#262238', '#34304a'], { tufts: 0.006 });
+      K.ground(p, g.rand, g.hz + 2, ['#0c0a18', '#1d1a2e', '#262238', '#34304a'], { u: g.u, tufts: 0.006 });
       const stone = ['#24203a', '#4c4766', '#625c80', '#7d779c', '#9a95b8'];
       for (let y = g.hz + r(20 * g.k); y < g.H + 10; y += r(44 * g.k)) {
         for (let x = r(K.hash(y, 3) * 60); x < g.W; x += r((80 + K.hash(x, y) * 70) * g.k)) {
@@ -350,8 +474,8 @@
     front(ctx, t, g) {
       Fx.fog(ctx, t, g, { n: 7, y0: g.hz, y1: g.H - 8, color: '#a49ccc33', speed: 3 });
       Fx.each(6, 19, (i, a, b) => {
-        const x = a * g.W + Math.sin(t * 0.5 + i * 2) * 20, y = g.hz + b * (g.H - g.hz) * 0.8 + Math.sin(t * 1.3 + i) * 5, f = Math.floor(t * 6 + i) % 2;
-        Fx.dot(ctx, x - 2, y - 1, 5, 4, '#3f6aa0'); Fx.dot(ctx, x - 1, y - 3 - f, 3, 5, '#6ea8e0'); Fx.dot(ctx, x, y - 1, 1, 2, '#dcefff');
+        const x = a * g.W + Math.sin(t * 0.5 + i * 2) * 20 * g.u, y = g.hz + b * (g.H - g.hz) * 0.8 + Math.sin(t * 1.3 + i) * 5 * g.u, f = Math.floor(t * 6 + i) % 2;
+        Fx.wisp(ctx, x, y, f, ['#3f6aa0', '#6ea8e0', '#dcefff']);
       });
       Fx.twinkle(ctx, t, g, { n: 10, colors: ['#fff6d8'], y0: 0, y1: g.hz * 0.7, drift: 0 });
     },
@@ -368,7 +492,7 @@
         g.ceiling = Math.max(g.ceiling, h);
       }
       K.range(p, g.rand, { y: g.hz + 4, height: 50 * g.k, width: 70 * g.k, ramp: ['#0e0a18', '#251c40', '#2e2350', '#3a2c62', '#4c3c7a'] });
-      K.ground(p, g.rand, g.hz + 4, ['#0e0a18', '#211836', '#2a2044', '#3a2e5a'], { tufts: 0.004, pebble: true });
+      K.ground(p, g.rand, g.hz + 4, ['#0e0a18', '#211836', '#2a2044', '#3a2e5a'], { u: g.u, tufts: 0.004, pebble: true });
       const ramps = [
         ['#1c3a5e', '#3a6ab0', '#5a98e0', '#8ec8ff', '#e8f6ff'],
         ['#4a1e6a', '#7a3ab0', '#a35ad8', '#cf8cff', '#f6e6ff'],
@@ -387,7 +511,7 @@
       // Crystals glint one at a time.
       g.glows.forEach(([x, y, c], i) => {
         if (Math.floor(t * 2 + i * 1.7) % 5) return;
-        Fx.dot(ctx, x, y - 3, 1, 7, '#ffffff'); Fx.dot(ctx, x - 3, y, 7, 1, '#ffffff'); Fx.dot(ctx, x - 1, y - 1, 3, 3, c);
+        Fx.blk(ctx, x, y, 0, -3, 1, 7, '#ffffff'); Fx.blk(ctx, x, y, -3, 0, 7, 1, '#ffffff'); Fx.blk(ctx, x, y, -1, -1, 3, 3, c);
       });
       Fx.twinkle(ctx, t, g, { n: 18, colors: ['#d7a8ff', '#8ec8ff', '#ff9cd8'], y0: 0, y1: g.H, drift: 4 });
     },

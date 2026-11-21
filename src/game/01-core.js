@@ -879,19 +879,32 @@ let drawWorld = () => {};
 const ambientLayer = $('#ambientLayer');
 let drawResidents = () => {}; // fills ambientLayer with wildlife; the habitat scripts assign the real one
 
-// The scenery is real pixel art: the canvas holds one pixel per art pixel, shown at a whole number
-// of screen pixels each (about 2 CSS pixels, close to the sprites), so every pixel stays crisp.
-let worldPixel = 2;
+// The scenery is real pixel art at the same pixel size as the Pokémon sprites: the canvas holds one
+// pixel per CSS pixel (the sprites show at their own size too), drawn without smoothing.
+let worldPixel = 1;
 function resizeWorld() {
-  const dpr = devicePixelRatio || 1;
-  worldPixel = Math.max(2, Math.round(2 * dpr)) / dpr;
-  world.width = Math.max(1, Math.ceil(innerWidth / worldPixel));
-  world.height = Math.max(1, Math.ceil(innerHeight / worldPixel));
+  const w = Math.max(1, Math.ceil(innerWidth / worldPixel)), h = Math.max(1, Math.ceil(innerHeight / worldPixel));
+  // Phones show and hide their address bar while scrolling, which changes the height a little. Keep
+  // the taller canvas then (it just runs past the bottom edge) instead of rebuilding the scene.
+  const keep = w === world.width && h <= world.height && h > world.height * 0.8;
+  if (!keep) {
+    world.width = w;
+    world.height = h;
+  }
   world.style.width = world.width * worldPixel + 'px';
   world.style.height = world.height * worldPixel + 'px';
   wctx.imageSmoothingEnabled = false;
 }
-addEventListener('resize', resizeWorld);
+// Rebuilding a biome at a new size takes a moment, so wait until the window stops changing size.
+// Meanwhile, stretch the current picture over the window so no edge shows.
+let resizeTimer = 0;
+addEventListener('resize', () => {
+  if (Math.ceil(innerWidth / worldPixel) > world.width || Math.ceil(innerHeight / worldPixel) > world.height) {
+    for (const canvas of [world, $('#worldFront')]) if (canvas) { canvas.style.width = '100vw'; canvas.style.height = '100vh'; }
+  }
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(resizeWorld, 150);
+});
 resizeWorld();
 
 (function worldLoop() {

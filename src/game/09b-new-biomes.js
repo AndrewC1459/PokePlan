@@ -25,7 +25,7 @@
     pad: ['#7d93ad', '#bccde0', '#d8e5f1', '#ffffff'],
     paintSky(p, g) {
       K.dome(p, r(g.W * 0.72), r(g.H * 0.13), 8 * g.k + 4, 8 * g.k + 4, ['#fff1c8', '#fff8e4', '#ffffff'], '#e8d6a8');
-      Fx.makeClouds(g, PAL.cloud, { n: Math.ceil(g.W / 180) + 2, y1: 0.22 });
+      Fx.makeClouds(g, PAL.cloud, { n: Math.ceil(g.Wu / 180) + 2, y1: 0.22 });
     },
     paint(p, g) {
       const snow = ['#c4d6ea', '#ffffff'];
@@ -34,7 +34,7 @@
       for (let x = r(g.rand() * 30); x < g.W; x += r((30 + g.rand() * 50) * g.k)) {
         K.pine(p, x, g.hz + r((4 + g.rand() * 8) * g.k), r((30 + g.rand() * 20) * g.k), ['#173a38', '#24524c', '#2f665c', '#3c7a6a'], ['#2a1e18', '#4a3424'], snow);
       }
-      K.ground(p, g.rand, g.hz + r(8 * g.k), ['#7d93ad', '#c4d6ea', '#e2ecf6', '#ffffff'], { tufts: 0.002, pebble: true });
+      K.ground(p, g.rand, g.hz + r(8 * g.k), ['#7d93ad', '#c4d6ea', '#e2ecf6', '#ffffff'], { u: g.u, tufts: 0.002, pebble: true });
       // A frozen pond with cracks and a shine.
       const px = r(g.W * 0.62), py = g.hz + r((g.H - g.hz) * 0.5), pw = r(Math.min(g.W * 0.2, 90 * g.k));
       K.dome(p, px, py, pw, r(9 * g.k), ['#6aa8cc', '#8cc4e0', '#b0dcf0', '#d8f0fa'], '#4a7a9a');
@@ -43,8 +43,8 @@
     },
     behind: (ctx, t, g) => Fx.clouds(ctx, t, g),
     front(ctx, t, g) {
-      Fx.fall(ctx, t, g, { n: Math.ceil(g.W / 7), seed: 8, vx: 6, vy: 18, colors: ['#ffffff', '#e4eef8'], sway: 6 });
-      Fx.fall(ctx, t, g, { n: Math.ceil(g.W / 30), seed: 9, vx: 10, vy: 28, colors: ['#ffffff'], w: 2, h: 2, sway: 8 });
+      Fx.fall(ctx, t, g, { n: Math.ceil(g.Wu / 7), seed: 8, vx: 6, vy: 18, colors: ['#ffffff', '#e4eef8'], sway: 6 });
+      Fx.fall(ctx, t, g, { n: Math.ceil(g.Wu / 30), seed: 9, vx: 10, vy: 28, colors: ['#ffffff'], w: 2, h: 2, sway: 8 });
     },
   };
 
@@ -53,12 +53,12 @@
     pad: ['#8a6440', '#bc9460', '#cfa870', '#e6c68e'],
     paintSky(p, g) {
       K.dome(p, r(g.W * 0.2), r(g.hz - 40 * g.k), 18 * g.k + 4, 18 * g.k + 4, ['#ffd27a', '#ffe59e', '#fff4d0'], '#f0a050');
-      Fx.makeClouds(g, ['#c9805a', '#f0c49a', '#fbdcbc', '#fff2e0'], { n: Math.ceil(g.W / 180) + 2, y1: 0.24 });
+      Fx.makeClouds(g, ['#c9805a', '#f0c49a', '#fbdcbc', '#fff2e0'], { n: Math.ceil(g.Wu / 180) + 2, y1: 0.24 });
     },
     paint(p, g) {
       K.range(p, g.rand, { y: g.hz - r(6 * g.k), height: 90 * g.k, width: 100 * g.k, ramp: ['#4a2e3a', '#7a4f5a', '#8c5c64', '#a06c70', '#b88080'] });
       K.range(p, g.rand, { y: g.hz + 2, height: 24 * g.k, width: 90 * g.k, ramp: ['#3a4a2c', '#5a7040', '#68804a', '#7a9456', '#94ae6a'], round: true });
-      K.ground(p, g.rand, g.hz + r(6 * g.k), ['#5a3e24', '#a8804e', '#c49a62', '#dcb67a'], { tufts: 0.004, pebble: true });
+      K.ground(p, g.rand, g.hz + r(6 * g.k), ['#5a3e24', '#a8804e', '#c49a62', '#dcb67a'], { u: g.u, tufts: 0.004, pebble: true });
       // The dojo: plaster walls with timber frames, a two-tier roof with upturned eaves, and steps.
       const dx = r(g.W * 0.66), base = g.hz + r(10 * g.k), w = r(64 * g.k), wh = r(26 * g.k);
       g.dojo = [dx, base, w];
@@ -91,17 +91,17 @@
       const [, base] = g.dojo;
       for (const x of g.poles) for (let i = 0; i < 6; i++) {
         const wave = Math.round(Math.sin(t * 6 + i * 0.9 + x) * 2 * g.k), y = base - r(52 * g.k) + wave, h = r(24 * g.k);
-        Fx.dot(ctx, x + 2 + i * 3, y - 1, 3, h + 2, '#4a1a16');
-        Fx.dot(ctx, x + 2 + i * 3, y, 3, h, i === 2 || i === 3 ? '#f6ead0' : '#c4423a');
+        Fx.dot(ctx, x + (2 + i * 3) * g.px, y - g.px, 3 * g.px, h + 2 * g.px, '#4a1a16');
+        Fx.dot(ctx, x + (2 + i * 3) * g.px, y, 3 * g.px, h, i === 2 || i === 3 ? '#f6ead0' : '#c4423a');
       }
-      Fx.fall(ctx, t, g, { n: Math.ceil(g.W / 30), seed: 10, vx: 30, vy: 10, colors: ['#e07b4a', '#f2b24e', '#c4423a'], w: 2, h: 1, sway: 10 });
+      Fx.fall(ctx, t, g, { n: Math.ceil(g.Wu / 30), seed: 10, vx: 30, vy: 10, colors: ['#e07b4a', '#f2b24e', '#c4423a'], w: 2, h: 1, sway: 10 });
     },
   };
 
   SCENES.foundry = {
     sky: ['#55606e', '#66717e', '#7a838c', '#949a9c', '#aeaea4'],
     pad: ['#2e3238', '#50565e', '#60666e', '#7a8088'],
-    paintSky(p, g) { Fx.makeClouds(g, ['#56606a', '#868e96', '#a0a6ac', '#bcc0c2'], { n: Math.ceil(g.W / 150) + 2, y1: 0.25, speed: 1.5 }); },
+    paintSky(p, g) { Fx.makeClouds(g, ['#56606a', '#868e96', '#a0a6ac', '#bcc0c2'], { n: Math.ceil(g.Wu / 150) + 2, y1: 0.25, speed: 1.5 }); },
     paint(p, g) {
       // Factory halls with sawtooth roofs, lit windows, and striped smokestacks.
       g.stacks = [];
@@ -130,7 +130,7 @@
         K.strokes(p, [[x, gy, x + 28 * g.k, gy + gh], [x, gy + gh, x + 28 * g.k, gy]], 1.6, '#6a7480');
         p.rect(x, gy, 2, gh, '#3a4048');
       }
-      K.ground(p, g.rand, gy + gh + 2, ['#1e2228', '#3e444c', '#4a5058', '#5e646c'], { tufts: 0.004, pebble: true });
+      K.ground(p, g.rand, gy + gh + 2, ['#1e2228', '#3e444c', '#4a5058', '#5e646c'], { u: g.u, tufts: 0.004, pebble: true });
       const sy = gy + gh + r(8 * g.k);
       for (let x = 0; x < g.W; x += 8) { p.rect(x, sy, 4, 3, '#f2c230'); p.rect(x + 4, sy, 4, 3, '#2a2e34'); }
       g.belt = sy + 4;
@@ -143,15 +143,15 @@
           const life = (t * 0.3 + i / 4) % 1, s = r((4 + life * 12) * g.k);
           Fx.dot(ctx, x - s / 2 + life * 24 * g.k, y - 3 - life * 50 * g.k, s, r(s * 0.7), life < 0.5 ? '#9aa0a6' : '#b8bcbe');
         });
-        if (Math.floor(t * 2 + x) % 3) Fx.dot(ctx, x, y - 2, 1, 1, '#ff5a4a');
+        if (Math.floor(t * 2 + x) % 3) Fx.blk(ctx, x, y, 0, -2, 1, 1, '#ff5a4a');
       }
       // Crates riding the conveyor.
       const s = r(9 * g.k);
       for (let i = 0; i * 60 * g.k < g.W + 60; i++) {
-        const x = K.wrap(i * 60 * g.k + t * 20, g.W + 60) - 30;
+        const x = K.wrap(i * 60 * g.k + t * 20 * g.u, g.W + 60 * g.u) - 30 * g.u;
         Fx.dot(ctx, x - 1, g.belt - s, s + 2, s + 1, '#3e2414'); Fx.dot(ctx, x, g.belt - s + 1, s, s - 1, '#b07a4a'); Fx.dot(ctx, x, g.belt - s + 1, s, 1, '#d8a070');
       }
-      if (Math.floor(t * 4) % 5 < 2) Fx.each(6, Math.floor(t * 8), (i, a, b) => Fx.dot(ctx, g.W * 0.3 + (a - 0.5) * 12, g.hz + 4 + (b - 0.5) * 8, 1, 1, i % 2 ? '#ffe08a' : '#ffffff'));
+      if (Math.floor(t * 4) % 5 < 2) Fx.each(6, Math.floor(t * 8), (i, a, b) => Fx.blk(ctx, g.W * 0.3 + (a - 0.5) * 12 * g.u, g.hz + (4 + (b - 0.5) * 8) * g.u, 0, 0, 1, 1, i % 2 ? '#ffe08a' : '#ffffff'));
     },
   };
 
@@ -160,13 +160,13 @@
     pad: ['#5a8a68', '#8cc49c', '#a3d4af', '#c4ecca'],
     paintSky(p, g) {
       K.dome(p, r(g.W * 0.78), r(g.H * 0.13), 9 * g.k + 4, 9 * g.k + 4, ['#fff2c0', '#fffae0', '#ffffff'], '#f0d090');
-      Fx.makeClouds(g, ['#c79ad0', '#f6d6ee', '#ffeaf6', '#ffffff'], { n: Math.ceil(g.W / 170) + 2, y1: 0.25 });
+      Fx.makeClouds(g, ['#c79ad0', '#f6d6ee', '#ffeaf6', '#ffffff'], { n: Math.ceil(g.Wu / 170) + 2, y1: 0.25 });
     },
     paint(p, g) {
       K.range(p, g.rand, { y: g.hz - r(8 * g.k), height: 40 * g.k, width: 110 * g.k, ramp: ['#6a8a92', '#9cc0c4', '#acd0cc', '#bfded4', '#d6eee0'], round: true });
       const hills = K.range(p, g.rand, { y: g.hz + 2, height: 22 * g.k, width: 80 * g.k, ramp: ['#4a7a5a', '#7ab48a', '#8cc49c', '#a3d4af', '#c4ecca'], round: true });
       for (let x = r(g.rand() * 60); x < g.W; x += r((90 + g.rand() * 60) * g.k)) K.tree(p, x, hills[Math.min(g.W - 1, Math.max(0, x))] + 4, r((7 + g.rand() * 3) * g.k), ['#5a4a7a', '#8a6ab0', '#b08ad0', '#d4b0ec', '#f0d8ff'], ['#4a3424', '#7a5634', '#9a7048']);
-      K.ground(p, g.rand, g.hz, ['#4a7a5a', '#7ab48a', '#9ccca8', '#c4ecca'], { tufts: 0.006 });
+      K.ground(p, g.rand, g.hz, ['#4a7a5a', '#7ab48a', '#9ccca8', '#c4ecca'], { u: g.u, tufts: 0.006 });
       // Giant toadstools and flowers.
       const caps = [['#7a2a4a', '#c44a7a', '#e870a0', '#ff9cc4', '#ffd6e8'], ['#4a2a7a', '#7a4ac4', '#9c70e8', '#c49cff', '#ecdcff'], ['#2a4a7a', '#4a7ac4', '#70a0e8', '#9cc4ff', '#dcecff']];
       g.caps = [];
@@ -179,7 +179,7 @@
         p.tall(base - s * 2);
       }
       const petals = ['#ff9ec8', '#fff1a0', '#a8d4ff', '#ffffff', '#d6b0ff'];
-      for (let i = 0; i < g.W * (g.H - g.hz) * 0.003; i++) {
+      for (let i = 0; i < g.W * (g.H - g.hz) * 0.003 / g.u; i++) {
         const x = r(g.rand() * g.W), y = g.hz + 4 + r(g.rand() * (g.H - g.hz - 4)), c = petals[i % petals.length];
         p.set(x, y + 1, '#4a7a5a'); p.set(x - 1, y, c); p.set(x + 1, y, c); p.set(x, y - 1, c); p.set(x, y, '#ffd36a');
       }
@@ -187,7 +187,7 @@
     behind: (ctx, t, g) => Fx.clouds(ctx, t, g),
     front(ctx, t, g) {
       Fx.twinkle(ctx, t, g, { n: 22, colors: ['#fff6a8', '#ffffff', '#ffc4ec'], y0: g.H * 0.15, y1: g.H, drift: 5, plus: true });
-      Fx.fall(ctx, t, g, { n: Math.ceil(g.W / 30), seed: 12, vx: 4, vy: -8, colors: ['#ffd1ec', '#fff6a8'], sway: 6 });
+      Fx.fall(ctx, t, g, { n: Math.ceil(g.Wu / 30), seed: 12, vx: 4, vy: -8, colors: ['#ffd1ec', '#fff6a8'], sway: 6 });
     },
   };
 

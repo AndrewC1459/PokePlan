@@ -208,6 +208,11 @@
 /* Scenery in front of the wildlife (04-pixel-world.js): close-up props, cave ceilings, weather. */
 #worldFront{position:fixed;left:0;top:0;z-index:3;pointer-events:none;image-rendering:pixelated}
 /* Roaming wildlife (09-more-habitats.js) is placed by script each scenery frame. */
-.roamer{position:absolute;left:0;top:0;overflow:hidden;will-change:transform}
+.roamer{position:absolute;left:0;top:0;will-change:transform}
 .roamer img{display:block;image-rendering:pixelated;filter:drop-shadow(0 2px 0 #1a283b55)}
-.roamer.swim img{filter:none}
+.roamer.walk img,.roamer.swim img{filter:none}
+/* Roaming wildlife parts: the sprite (clipped at the waterline for swimmers) and its shadow or ripple. */
+.roamer-clip{position:relative;overflow:hidden}
+.roamer.swim .roamer-mark{z-index:1}
+.roamer-mark{position:absolute;left:0;top:0;background-repeat:no-repeat;image-rendering:pixelated;pointer-events:none}
+.roamer-mark[hidden]{display:none}

@@ -63,7 +63,10 @@ const PixelKit = (() => {
     }
     tall(y) { if (y < this.reach) this.reach = Math.round(y); }
     set(x, y, c) {
-      if (x >= 0 && y >= 0 && x < this.w && y < this.h) this.d[y * this.w + x] = pixel(c);
+      if (x < 0 || y < 0 || x >= this.w || y >= this.h) return;
+      // Neighbouring pixels usually share a colour, so remember the last one looked up.
+      if (c !== this.lastC) { this.lastC = c; this.lastV = pixel(c); }
+      this.d[y * this.w + x] = this.lastV;
     }
     rect(x, y, w, h, c) {
       x = Math.round(x); y = Math.round(y);
@@ -148,6 +151,8 @@ const PixelKit = (() => {
   function strokes(p, segs, w, fill, outline) {
     const xs = segs.flatMap(s => [s[0], s[2]]), ys = segs.flatMap(s => [s[1], s[3]]), r = w / 2;
     const near = (x, y) => segs.some(([ax, ay, bx, by]) => {
+      // Quick reject: outside this segment's box.
+      if (x + 0.5 < Math.min(ax, bx) - r || x + 0.5 > Math.max(ax, bx) + r || y + 0.5 < Math.min(ay, by) - r || y + 0.5 > Math.max(ay, by) + r) return false;
       const dx = bx - ax, dy = by - ay, len = dx * dx + dy * dy || 1;
       const k = clamp(((x + 0.5 - ax) * dx + (y + 0.5 - ay) * dy) / len, 0, 1);
       return Math.hypot(x + 0.5 - ax - dx * k, y + 0.5 - ay - dy * k) <= r;
@@ -174,7 +179,9 @@ const PixelKit = (() => {
 
   // A mountain range or hills across the whole width. ramp = [outline, shadow, base, lit, highlight].
   // Pointy peaks shade by side (lit on the left); round ones shade like domes. `snow` adds caps.
-  function range(p, rand, { y, height, width, count, ramp, round = false, snow = null, streaks = true, cap = 0.3 }) {
+  // Ranges are filled down to `floor` (by default a little below their base, since the ground or the
+  // next range covers the rest); pass floor: p.h when nothing is drawn below.
+  function range(p, rand, { y, height, width, count, ramp, round = false, snow = null, streaks = true, cap = 0.3, floor = Math.round(y + height * 0.5 + 12) }) {
     const W = p.w, peaks = [];
     const n = count || Math.max(2, Math.ceil(W / width) + 1);
     for (let i = -1; i <= n; i++) {
@@ -190,7 +197,7 @@ const PixelKit = (() => {
       });
       top[x] = Math.round(y - Math.max(0, best));
     }
-    p.shape(0, Math.min(...top), W, p.h, (x, yy) => yy >= top[x], (x, yy) => {
+    p.shape(0, Math.min(...top), W, Math.min(p.h, floor), (x, yy) => yy >= top[x], (x, yy) => {
       const pk = peaks[owner[x]], depth = yy - top[x], lit = x + 0.5 < pk.x;
       if (snow && yy < y - pk.h * (1 - cap) + (hash(x, 7) * 3 | 0)) return lit ? snow[1] : snow[0];
       if (round) {
@@ -206,19 +213,19 @@ const PixelKit = (() => {
 
   // Flat ground from `top` to the bottom with a dark edge and a few grass tufts or pebbles.
   // ramp = [outline, dark, base, light]
-  function ground(p, rand, top, ramp, { tufts = 0.004, pebble = false, patches = true } = {}) {
+  function ground(p, rand, top, ramp, { tufts = 0.004, pebble = false, patches = true, u = 1 } = {}) {
     p.rect(0, top, p.w, p.h - top, ramp[2]);
     // Lighter and darker patches (checker-dithered) so the ground isn't one flat colour.
     if (patches) {
-      const n = Math.ceil((p.w * (p.h - top)) / 5000);
+      const n = Math.ceil((p.w * (p.h - top)) / (5000 * u * u));
       for (let i = 0; i < n; i++) {
-        const cx = rand() * p.w, cy = top + 6 + rand() * (p.h - top), rx = 14 + rand() * 40, ry = 3 + rand() * 6, c = i % 3 ? ramp[3] : ramp[1];
+        const cx = rand() * p.w, cy = top + 6 + rand() * (p.h - top), rx = (14 + rand() * 40) * u, ry = (3 + rand() * 6) * u, c = i % 3 ? ramp[3] : ramp[1];
         p.shape(cx - rx, cy - ry, cx + rx, cy + ry, (x, y) => ((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1 && ((x + y) & 1) === 0, c);
       }
     }
     p.rect(0, top, p.w, 1, ramp[0]);
     p.rect(0, top + 1, p.w, 1, ramp[3]);
-    const n = Math.floor(p.w * (p.h - top) * tufts);
+    const n = Math.floor((p.w * (p.h - top) * tufts) / u);
     for (let i = 0; i < n; i++) {
       const x = Math.floor(rand() * p.w), y = top + 3 + Math.floor(rand() * (p.h - top - 3));
       if (pebble) { p.rect(x, y, 2, 1, ramp[1]); p.set(x, y - 1, ramp[3]); continue; }
@@ -339,11 +346,15 @@ const SCENES = {};
 const SceneFx = (() => {
   const { hash, wrap } = PixelKit;
   const r = Math.round;
+  // The moving parts were designed for art pixels twice the size of the sprites'. U scales their
+  // speeds and distances to the scene, Q the size of their pixel blocks (set by paintScene).
+  let U = 1, Q = 1;
+  const use = g => { U = g.u; Q = g.px; };
   // Clouds made once per scene, then drifted each frame.
   function makeClouds(g, ramp, { n = 5, y0 = 0.06, y1 = 0.3, size = 1, speed = 2 } = {}) {
     g.clouds = Array.from({ length: n }, (_, i) => {
       const w = r((26 + g.rand() * 40) * g.k * size), h = r(w * (0.3 + g.rand() * 0.12));
-      return { c: PixelKit.cloudSprite(w, h, ramp, i), x: g.rand() * g.W, y: r(g.H * (y0 + g.rand() * (y1 - y0))), v: speed * 3.5 * (0.6 + g.rand() * 0.8) };
+      return { c: PixelKit.cloudSprite(w, h, ramp, i), x: g.rand() * g.W, y: r(g.H * (y0 + g.rand() * (y1 - y0))), v: speed * 3.5 * g.u * (0.6 + g.rand() * 0.8) };
     });
   }
   function clouds(ctx, t, g) {
@@ -354,36 +365,46 @@ const SceneFx = (() => {
     for (let i = 0; i < n; i++) fn(i, hash(i, seed), hash(seed + 11, i * 7 + 1), hash(i * 13 + 3, seed * 3 + 5));
   }
   function dot(ctx, x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(r(x), r(y), w, h); }
+  // One block of a small moving motif (a bird, a wisp): offset and size in motif pixels, each Q wide.
+  function blk(ctx, x, y, dx, dy, w, h, c) { ctx.fillStyle = c; ctx.fillRect(r(x) + dx * Q, r(y) + dy * Q, w * Q, h * Q); }
   // Short light dashes that come and go on water.
   function shimmer(ctx, t, x0, y0, x1, y1, colors, n, speed = 3) {
     each(n, 41, (i, a, b, c) => {
       if (Math.floor(t * 1.6 + c * 7) % 3 === 0) return;
-      dot(ctx, x0 + wrap(a * (x1 - x0) + t * speed * (b > 0.5 ? 1 : -0.6), x1 - x0), y0 + Math.floor(b * (y1 - y0)), 2 + Math.floor(c * 5), 1, colors[i % colors.length]);
+      dot(ctx, x0 + wrap(a * (x1 - x0) + t * speed * U * (b > 0.5 ? 1 : -0.6), x1 - x0), y0 + Math.floor(b * (y1 - y0)), (2 + Math.floor(c * 5)) * Q, Q, colors[i % colors.length]);
     });
   }
   // Falling or rising specks: snow, embers, rain, dust.
   function fall(ctx, t, g, { n, seed = 1, vx = 0, vy = 20, colors, w = 1, h = 1, y0 = 0, y1 = g.H, sway = 0 }) {
     each(n, seed, (i, a, b, c) => {
-      const span = y1 - y0, y = y0 + wrap(b * span + t * vy * (0.7 + c * 0.6), span);
-      dot(ctx, wrap(a * g.W + t * vx + Math.sin(t * 1.3 + i) * sway, g.W), y, w, h, colors[i % colors.length]);
+      const span = y1 - y0, y = y0 + wrap(b * span + t * vy * U * (0.7 + c * 0.6), span);
+      dot(ctx, wrap(a * g.W + t * vx * U + Math.sin(t * 1.3 + i) * sway * U, g.W), y, w * Q, h * Q, colors[i % colors.length]);
     });
   }
   // Floating lights that blink: fireflies, wisps, sparkles.
   function twinkle(ctx, t, g, { n, seed = 3, colors, y0 = 0, y1 = g.H, drift = 3, plus = false }) {
     each(n, seed, (i, a, b, c) => {
       if (Math.floor(t * 2 + c * 9) % 4 === 0) return;
-      const x = a * g.W + Math.sin(t * 0.7 + i * 2) * drift * 2, y = y0 + b * (y1 - y0) + Math.cos(t * 0.9 + i) * drift;
+      const x = a * g.W + Math.sin(t * 0.7 + i * 2) * drift * 2 * U, y = y0 + b * (y1 - y0) + Math.cos(t * 0.9 + i) * drift * U;
       const col = colors[i % colors.length];
-      dot(ctx, x, y, 1, 1, col);
-      if (plus && c > 0.5) { dot(ctx, x - 1, y, 1, 1, col); dot(ctx, x + 1, y, 1, 1, col); dot(ctx, x, y - 1, 1, 1, col); dot(ctx, x, y + 1, 1, 1, col); }
+      blk(ctx, x, y, 0, 0, 1, 1, col);
+      if (plus && c > 0.5) { blk(ctx, x, y, -1, 0, 1, 1, col); blk(ctx, x, y, 1, 0, 1, 1, col); blk(ctx, x, y, 0, -1, 1, 1, col); blk(ctx, x, y, 0, 1, 1, 1, col); }
     });
   }
   // Fog strips drifting sideways (pixel bands with soft alpha).
   function fog(ctx, t, g, { n = 5, y0, y1, color, speed = 3 }) {
     each(n, 77, (i, a, b, c) => {
-      const w = r((30 + c * 60) * g.k), x = wrap(a * g.W + t * speed * (b > 0.5 ? 1 : -1), g.W + w) - w, y = y0 + b * (y1 - y0);
-      dot(ctx, x, y, w, 2, color); dot(ctx, x + 6, y - 2, w - 12, 2, color);
+      const w = r((30 + c * 60) * g.k), x = wrap(a * g.W + t * speed * U * (b > 0.5 ? 1 : -1), g.W + w) - w, y = y0 + b * (y1 - y0);
+      dot(ctx, x, y, w, 2 * Q, color); dot(ctx, x + 6 * Q, y - 2 * Q, w - 12 * Q, 2 * Q, color);
     });
+  }
+  // A small bird flapping: two wings that lift on alternate frames.
+  function bird(ctx, x, y, up, c, span = 2, body = c) {
+    blk(ctx, x, y, -span, -up, span, 1, c); blk(ctx, x, y, 0, 0, 1, 1, body); blk(ctx, x, y, 1, -up, span, 1, c);
+  }
+  // A will-o'-wisp: a two-frame flame.
+  function wisp(ctx, x, y, f, [dark, mid, core]) {
+    blk(ctx, x, y, -2, -1, 5, 4, dark); blk(ctx, x, y, -1, -3 - f, 3, 5, mid); blk(ctx, x, y, 0, -1, 1, 2, core);
   }
   // Big props up close at the bottom corners (and now and then between) frame each scene.
   // fn(x, base, scale, i) paints one; base sits a little below the bottom edge.
@@ -393,7 +414,7 @@ const SceneFx = (() => {
     xs.push(r(g.W * 0.97 - g.rand() * 10 * g.k));
     xs.forEach((x, i) => fn(x, g.H + r(3 * g.k), 0.9 + g.rand() * 0.4, i));
   }
-  return { makeClouds, clouds, each, dot, shimmer, fall, twinkle, fog, framing };
+  return { use, makeClouds, clouds, each, dot, blk, shimmer, fall, twinkle, fog, bird, wisp, framing };
 })();
 
 // Shared palettes (outline first, then dark → light).
@@ -414,7 +435,7 @@ const PAL = {
     pad: ['#3a6a35', '#5f9a48', '#79b657', '#a5d77a'],
     paintSky(p, g) {
       K.dome(p, r(g.W * 0.82), r(g.H * 0.12), 9 * g.k + 4, 9 * g.k + 4, ['#ffd25a', '#ffe580', '#fff4bf'], '#f6b847');
-      F.makeClouds(g, PAL.cloud, { n: Math.ceil(g.W / 160) + 2 });
+      F.makeClouds(g, PAL.cloud, { n: Math.ceil(g.Wu / 160) + 2 });
     },
     paint(p, g) {
       K.range(p, g.rand, { y: g.hz - r(24 * g.k), height: 60 * g.k, width: 140 * g.k, ramp: ['#4f7aa2', '#7ea3c4', '#8fb3d0', '#a3c4dc', '#bcd6e8'], round: true });
@@ -422,9 +443,9 @@ const PAL = {
       for (let x = r(g.rand() * 40); x < g.W; x += r((50 + g.rand() * 70) * g.k)) {
         K.tree(p, x, hills[Math.min(g.W - 1, Math.max(0, x))] + r(4 * g.k), r((7 + g.rand() * 4) * g.k), PAL.leaf, PAL.bark);
       }
-      K.ground(p, g.rand, g.hz, PAL.grass, { tufts: 0.006 });
+      K.ground(p, g.rand, g.hz, PAL.grass, { u: g.u, tufts: 0.006 });
       const petals = ['#ffffff', '#ffe066', '#ff9bc0', '#ffb1e0'];
-      for (let i = 0; i < g.W * (g.H - g.hz) * 0.0025; i++) {
+      for (let i = 0; i < g.W * (g.H - g.hz) * 0.0025 / g.u; i++) {
         const x = r(g.rand() * g.W), y = g.hz + 4 + r(g.rand() * (g.H - g.hz - 4)), c = petals[i % petals.length];
         p.set(x, y, c); p.set(x - 1, y, c); p.set(x + 1, y, c); p.set(x, y - 1, c); p.set(x, y, '#f7c948');
       }
@@ -437,7 +458,7 @@ const PAL = {
   SCENES.forest = {
     sky: ['#5ea7c7', '#78b9cf', '#97cbd6', '#bbdcd8'],
     pad: ['#2f4f2c', '#4c7339', '#5f8a45', '#86ad5e'],
-    paintSky(p, g) { F.makeClouds(g, PAL.cloud, { n: Math.ceil(g.W / 200) + 1, size: 0.8, y1: 0.18 }); },
+    paintSky(p, g) { F.makeClouds(g, PAL.cloud, { n: Math.ceil(g.Wu / 200) + 1, size: 0.8, y1: 0.18 }); },
     paint(p, g) {
       for (let x = -10; x < g.W + 10; x += r((14 + g.rand() * 8) * g.k)) {
         K.pine(p, x, g.hz - r(12 * g.k), r((44 + g.rand() * 22) * g.k), ['#1e3d3c', '#2e5752', '#3a6a62', '#4b7d70'], ['#1e2a24', '#2e3a30']);
@@ -445,13 +466,13 @@ const PAL = {
       for (let x = -20; x < g.W + 20; x += r((26 + g.rand() * 14) * g.k)) {
         K.tree(p, x, g.hz + r(6 * g.k), r((11 + g.rand() * 5) * g.k), ['#1f4430', '#2b5d39', '#3f7c45', '#5c9b52', '#7fbb63'], PAL.bark);
       }
-      K.ground(p, g.rand, g.hz + r(6 * g.k), ['#25402a', '#3b6233', '#4f7a3e', '#6b9750'], { tufts: 0.008 });
+      K.ground(p, g.rand, g.hz + r(6 * g.k), ['#25402a', '#3b6233', '#4f7a3e', '#6b9750'], { u: g.u, tufts: 0.008 });
       // Sunlight patches on the forest floor.
-      for (let i = 0; i < g.W / 50; i++) {
+      for (let i = 0; i < g.Wu / 50; i++) {
         const x = r(g.rand() * g.W), y = g.hz + r((12 + g.rand() * 40) * g.k), w = r((10 + g.rand() * 16) * g.k);
         p.shape(x - w, y - 3, x + w, y + 3, (xx, yy) => ((xx - x) / w) ** 2 + ((yy - y) / 3) ** 2 <= 1 && (xx + yy) % 2 === 0, '#86ad5e');
       }
-      for (let i = 0; i < g.W / 70; i++) {
+      for (let i = 0; i < g.Wu / 70; i++) {
         const x = r(g.rand() * g.W), y = g.hz + r((14 + g.rand() * 60) * g.k);
         K.dome(p, x, y - 3, 3, 3, ['#b8403a', '#e2584b', '#ff8a70'], '#5a2420', { floor: y - 1 });
         p.rect(x - 1, y - 1, 2, 3, '#f2e6cc'); p.set(x - 1, y - 4, '#fff');
@@ -467,12 +488,12 @@ const PAL = {
   SCENES.river = {
     sky: ['#4e9bd8', '#69aee0', '#88c1e8', '#a9d4ee', '#cbe6f1'],
     pad: ['#3a6a35', '#5f9a48', '#79b657', '#a5d77a'],
-    paintSky(p, g) { F.makeClouds(g, PAL.cloud, { n: Math.ceil(g.W / 160) + 2 }); },
+    paintSky(p, g) { F.makeClouds(g, PAL.cloud, { n: Math.ceil(g.Wu / 160) + 2 }); },
     paint(p, g) {
       K.range(p, g.rand, { y: g.hz - r(14 * g.k), height: 48 * g.k, width: 120 * g.k, ramp: ['#4f7aa2', '#7ea3c4', '#8fb3d0', '#a3c4dc', '#bcd6e8'], round: true });
       const far = K.range(p, g.rand, { y: g.hz + 2, height: 22 * g.k, width: 80 * g.k, ramp: ['#2f5a37', '#4f8a3f', '#62a048', '#79b657', '#9fd474'], round: true });
       for (let x = r(g.rand() * 50); x < g.W; x += r((60 + g.rand() * 60) * g.k)) K.tree(p, x, far[Math.max(0, Math.min(g.W - 1, x))] + 3, r((6 + g.rand() * 3) * g.k), PAL.leaf, PAL.bark);
-      K.ground(p, g.rand, g.hz, PAL.grass, { tufts: 0.005 });
+      K.ground(p, g.rand, g.hz, PAL.grass, { u: g.u, tufts: 0.005 });
       // The river: a wavy band with sandy banks.
       const y0 = g.hz + r((g.H - g.hz) * 0.32), y1 = g.hz + r((g.H - g.hz) * 0.7);
       g.water = [y0, y1];
@@ -490,13 +511,13 @@ const PAL = {
       for (let x = r(g.rand() * 90); x < g.W; x += r((110 + g.rand() * 100) * g.k)) K.rock(p, x, y1 + r(bank(x + 40)) + 3, r(14 * g.k), r(7 * g.k), PAL.stone);
     },
     behind: (ctx, t, g) => F.clouds(ctx, t, g),
-    front: (ctx, t, g) => F.shimmer(ctx, t, 0, g.water[0] + 2, g.W, g.water[1] - 1, ['#d9f1fb', '#a9dcef'], Math.ceil(g.W / 18), 6),
+    front: (ctx, t, g) => F.shimmer(ctx, t, 0, g.water[0] + 2, g.W, g.water[1] - 1, ['#d9f1fb', '#a9dcef'], Math.ceil(g.Wu / 18), 6),
   };
 
   SCENES.volcano = {
     sky: ['#5a2c45', '#86384a', '#b6504b', '#d9774f', '#efa060'],
     pad: ['#2a1d24', '#4a3134', '#5e3d3a', '#7f5446'],
-    paintSky(p, g) { F.makeClouds(g, ['#4d2a38', '#7a4450', '#9c5a5e', '#bf7b6e'], { n: Math.ceil(g.W / 180) + 2, y1: 0.22, speed: 3 }); },
+    paintSky(p, g) { F.makeClouds(g, ['#4d2a38', '#7a4450', '#9c5a5e', '#bf7b6e'], { n: Math.ceil(g.Wu / 180) + 2, y1: 0.22, speed: 3 }); },
     paint(p, g) {
       K.range(p, g.rand, { y: g.hz - r(20 * g.k), height: 70 * g.k, width: 90 * g.k, ramp: ['#2c1a2a', '#4d2d3c', '#5e3747', '#71424f', '#8c5660'] });
       // The volcano: a broad cone with a glowing crater and lava runs.
@@ -513,9 +534,9 @@ const PAL = {
         while (y < g.hz) { const nx = x + (K.hash(r(x), r(y)) - 0.5 + dx * 0.8) * 10 * g.k, ny = y + 12 * g.k; segs.push([x, y, nx, ny]); x = nx; y = ny; }
         K.strokes(p, segs, Math.max(2, 3 * g.k), (xx, yy) => (K.hash(xx, yy) > 0.6 ? '#ffd166' : '#ff8a3d'), '#b23a2a');
       }
-      K.ground(p, g.rand, g.hz, ['#1e141c', '#3b2730', '#4a3134', '#5e4040'], { tufts: 0.004, pebble: true });
+      K.ground(p, g.rand, g.hz, ['#1e141c', '#3b2730', '#4a3134', '#5e4040'], { u: g.u, tufts: 0.004, pebble: true });
       // Lava cracks in the ground.
-      for (let i = 0; i < g.W / 60; i++) {
+      for (let i = 0; i < g.Wu / 60; i++) {
         let x = g.rand() * g.W, y = g.hz + 8 + g.rand() * (g.H - g.hz - 10);
         const segs = [];
         for (let s = 0; s < 4; s++) { const nx = x + (g.rand() - 0.3) * 16 * g.k, ny = y + (g.rand() - 0.5) * 6; segs.push([x, y, nx, ny]); x = nx; y = ny; }
@@ -529,10 +550,10 @@ const PAL = {
       // Smoke puffs rising from the crater.
       F.each(5, 9, (i, a) => {
         const life = (t * 0.25 + i / 5) % 1, s = r((4 + life * 10) * g.k);
-        F.dot(ctx, cx - s / 2 + life * 30 * g.k + Math.sin(i + t) * 3, top - 4 - life * 60 * g.k, s, r(s * 0.7), life < 0.5 ? '#6b4a58' : '#8a6a74');
-        F.dot(ctx, cx - s / 2 + life * 30 * g.k + Math.sin(i + t) * 3 + 1, top - 4 - life * 60 * g.k, s - 2, 1, '#a88a92');
+        F.dot(ctx, cx - s / 2 + life * 30 * g.k + Math.sin(i + t) * 3 * g.u, top - 4 - life * 60 * g.k, s, r(s * 0.7), life < 0.5 ? '#6b4a58' : '#8a6a74');
+        F.dot(ctx, cx - s / 2 + life * 30 * g.k + Math.sin(i + t) * 3 * g.u + g.px, top - 4 - life * 60 * g.k, s - 2 * g.px, g.px, '#a88a92');
       });
-      F.fall(ctx, t, g, { n: Math.ceil(g.W / 25), seed: 4, vx: 4, vy: -16, colors: ['#ffd166', '#ff8a3d', '#ff5a3a'], sway: 4 });
+      F.fall(ctx, t, g, { n: Math.ceil(g.Wu / 25), seed: 4, vx: 4, vy: -16, colors: ['#ffd166', '#ff8a3d', '#ff5a3a'], sway: 4 });
     },
   };
 
@@ -541,7 +562,7 @@ const PAL = {
     pad: ['#5d7590', '#9fb5cc', '#c7d6e6', '#ffffff'],
     paintSky(p, g) {
       K.dome(p, r(g.W * 0.18), r(g.H * 0.12), 8 * g.k + 4, 8 * g.k + 4, ['#ffe48a', '#fff2c0', '#fffbe8'], '#f6c85a');
-      F.makeClouds(g, PAL.cloud, { n: Math.ceil(g.W / 140) + 2, y0: 0.08, y1: 0.4, speed: 5 });
+      F.makeClouds(g, PAL.cloud, { n: Math.ceil(g.Wu / 140) + 2, y0: 0.08, y1: 0.4, speed: 5 });
     },
     paint(p, g) {
       // Peaks poking up through a sea of clouds.
@@ -555,8 +576,8 @@ const PAL = {
     front(ctx, t, g) {
       // A few birds flapping across (two-frame V shapes).
       F.each(4, 21, (i, a, b) => {
-        const x = PixelKit.wrap(a * g.W + t * (14 + b * 8), g.W + 20) - 10, y = g.H * (0.15 + b * 0.25) + Math.sin(t * 2 + i) * 3, up = Math.floor(t * 4 + i) % 2;
-        F.dot(ctx, x - 2, y - up, 2, 1, '#2f3b52'); F.dot(ctx, x, y, 1, 1, '#2f3b52'); F.dot(ctx, x + 1, y - up, 2, 1, '#2f3b52');
+        const x = PixelKit.wrap(a * g.W + t * (14 + b * 8) * g.u, g.W + 20 * g.u) - 10 * g.u, y = g.H * (0.15 + b * 0.25) + Math.sin(t * 2 + i) * 3 * g.u, up = Math.floor(t * 4 + i) % 2;
+        F.bird(ctx, x, y, up, '#2f3b52');
       });
     },
   };
@@ -566,7 +587,7 @@ const PAL = {
     pad: ['#1a1622', '#3a3346', '#4c4358', '#655a72'],
     paint(p, g) {
       // Back wall texture, stalactites, a glowing pool and crystals.
-      for (let i = 0; i < g.W * g.H * 0.004; i++) { const x = r(g.rand() * g.W), y = r(g.rand() * g.hz); p.rect(x, y, 3, 1, '#3d3250'); p.set(x, y + 1, '#171221'); }
+      for (let i = 0; i < g.W * g.H * 0.004 / g.u; i++) { const x = r(g.rand() * g.W), y = r(g.rand() * g.hz); p.rect(x, y, 3, 1, '#3d3250'); p.set(x, y + 1, '#171221'); }
       // The ceiling hangs in front of the wildlife, which flies below its lowest point.
       for (let x = -6; x < g.W + 6; x += r((14 + g.rand() * 18) * g.k)) {
         const h = r((14 + g.rand() * 34) * g.k), w = r((6 + g.rand() * 6) * g.k);
@@ -575,7 +596,7 @@ const PAL = {
         g.ceiling = Math.max(g.ceiling, h);
       }
       K.range(p, g.rand, { y: g.hz + 4, height: 44 * g.k, width: 60 * g.k, ramp: ['#140f1d', '#2e2640', '#3b3150', '#4b3f62', '#64567e'] });
-      K.ground(p, g.rand, g.hz + 4, ['#140f1d', '#2a2238', '#382e48', '#4a3e5c'], { tufts: 0.004, pebble: true });
+      K.ground(p, g.rand, g.hz + 4, ['#140f1d', '#2a2238', '#382e48', '#4a3e5c'], { u: g.u, tufts: 0.004, pebble: true });
       const py = g.hz + r((g.H - g.hz) * 0.45), pw = r(g.W * 0.18);
       g.pool = [r(g.W * 0.3), py, pw];
       K.dome(p, g.pool[0], py, pw, r(9 * g.k), ['#1d3c58', '#2c5d80', '#3f7fa6', '#6fb5d6'], '#10202f');
@@ -591,12 +612,12 @@ const PAL = {
       F.shimmer(ctx, t, px - pw * 0.7, py - 4, px + pw * 0.7, py + 5, ['#a6e2f7', '#6fb5d6'], 8, 2);
       F.twinkle(ctx, t, g, { n: 14, colors: ['#9fe3ff', '#ffffff', '#c9a8ff'], y0: g.hz - 30, y1: g.H, drift: 2, plus: true });
       // Drips from the ceiling.
-      F.each(5, 33, (i, a, b) => { const y = PixelKit.wrap(t * 50 + b * 400, g.hz + 60); F.dot(ctx, a * g.W, y, 1, 2, '#8fd3f2'); });
+      F.each(5, 33, (i, a, b) => { const y = Math.max(g.ceiling, PixelKit.wrap((t * 50 + b * 400) * g.u, g.hz + 60 * g.u)); F.blk(ctx, a * g.W, y, 0, 0, 1, 2, '#8fd3f2'); });
     },
   };
 
   const nightSky = (p, g, moon = true) => {
-    for (let i = 0; i < g.W * g.hz * 0.002; i++) p.set(r(g.rand() * g.W), r(g.rand() * g.hz * 0.8), g.rand() > 0.7 ? '#fff6d8' : '#b9b4d8');
+    for (let i = 0; i < g.W * g.hz * 0.002 / g.u; i++) p.set(r(g.rand() * g.W), r(g.rand() * g.hz * 0.8), g.rand() > 0.7 ? '#fff6d8' : '#b9b4d8');
     if (!moon) return;
     const mx = r(g.W * 0.78), my = r(g.H * 0.14), mr = r(10 * g.k + 5);
     K.dome(p, mx, my, mr, mr, ['#c9c2a0', '#e8e1c0', '#fffbe6'], '#8f8a74');
@@ -610,15 +631,15 @@ const PAL = {
     paint(p, g) {
       K.range(p, g.rand, { y: g.hz - r(10 * g.k), height: 40 * g.k, width: 110 * g.k, ramp: ['#120f22', '#221d3a', '#2a2445', '#332c52', '#3f3762'], round: true });
       for (let x = r(g.rand() * 30); x < g.W; x += r((40 + g.rand() * 50) * g.k)) K.deadTree(p, x, g.hz + r(4 * g.k), r((50 + g.rand() * 30) * g.k), ['#0e0b18', '#2a2238', '#3a2f4c', '#4d4064']);
-      K.ground(p, g.rand, g.hz + r(4 * g.k), ['#0e0b18', '#1f1a30', '#29223c', '#3a3150'], { tufts: 0.005 });
+      K.ground(p, g.rand, g.hz + r(4 * g.k), ['#0e0b18', '#1f1a30', '#29223c', '#3a3150'], { u: g.u, tufts: 0.005 });
       for (let x = r(g.rand() * 90); x < g.W; x += r((100 + g.rand() * 100) * g.k)) K.bush(p, x, g.hz + r(14 * g.k), r(20 * g.k), ['#0e0b18', '#1f2a2c', '#2a3a3a', '#38504a']);
     },
     front(ctx, t, g) {
       F.fog(ctx, t, g, { n: 6, y0: g.hz - 4, y1: g.H - 10, color: '#8f88b833', speed: 4 });
       // Will-o'-wisps: two-frame flames.
       F.each(5, 13, (i, a, b) => {
-        const x = a * g.W + Math.sin(t * 0.6 + i * 3) * 18, y = g.hz - 10 + b * (g.H - g.hz) + Math.sin(t * 1.4 + i) * 6, f = Math.floor(t * 6 + i) % 2;
-        F.dot(ctx, x - 2, y - 1, 5, 4, '#5a3fa0'); F.dot(ctx, x - 1, y - 3 - f, 3, 5, '#8f6ee0'); F.dot(ctx, x, y - 1, 1, 2, '#e8dcff');
+        const x = a * g.W + Math.sin(t * 0.6 + i * 3) * 18 * g.u, y = g.hz - 10 * g.u + b * (g.H - g.hz) + Math.sin(t * 1.4 + i) * 6 * g.u, f = Math.floor(t * 6 + i) % 2;
+        F.wisp(ctx, x, y, f, ['#5a3fa0', '#8f6ee0', '#e8dcff']);
       });
     },
   };
@@ -626,7 +647,7 @@ const PAL = {
   SCENES.ruins = {
     sky: ['#3c3f66', '#575a80', '#787594', '#a08c98', '#c7a796'],
     pad: ['#3a3d3a', '#6b6c62', '#86877a', '#a8a896'],
-    paintSky(p, g) { nightSky(p, g, false); F.makeClouds(g, ['#4e4b6a', '#7d7896', '#9f97ae', '#c2b6c4'], { n: Math.ceil(g.W / 200) + 1, y1: 0.25 }); },
+    paintSky(p, g) { nightSky(p, g, false); F.makeClouds(g, ['#4e4b6a', '#7d7896', '#9f97ae', '#c2b6c4'], { n: Math.ceil(g.Wu / 200) + 1, y1: 0.25 }); },
     paint(p, g) {
       K.range(p, g.rand, { y: g.hz - r(4 * g.k), height: 30 * g.k, width: 120 * g.k, ramp: ['#2c2d3e', '#46485e', '#52556c', '#5f627a', '#75788e'], round: true });
       const stone = ['#3b3934', '#6e6a5e', '#8a8676', '#a9a492', '#cbc6b0'];
@@ -639,7 +660,7 @@ const PAL = {
         if (Math.abs(x - ax) < aw + 20) continue;
         K.pillar(p, x, base, r(9 * g.k), r((30 + g.rand() * 40) * g.k), stone, g.rand() > 0.4 ? r(8 * g.k) : 0);
       }
-      K.ground(p, g.rand, base, ['#2e3328', '#4d5a3c', '#5f6e48', '#7a8a58'], { tufts: 0.006 });
+      K.ground(p, g.rand, base, ['#2e3328', '#4d5a3c', '#5f6e48', '#7a8a58'], { u: g.u, tufts: 0.006 });
       // Flagstones.
       for (let y = base + r(8 * g.k); y < g.H; y += r(16 * g.k)) for (let x = r(K.hash(y, 1) * 30); x < g.W; x += r(30 * g.k)) {
         if (K.hash(x, y) < 0.72) continue;
@@ -654,16 +675,16 @@ const PAL = {
   SCENES.marsh = {
     sky: ['#4c5e5e', '#5f726c', '#768a7c', '#90a38c', '#aab79c'],
     pad: ['#2a3a2c', '#47603f', '#58734b', '#748f5e'],
-    paintSky(p, g) { F.makeClouds(g, ['#56685f', '#8a9c8c', '#a6b6a4', '#c4cfbd'], { n: Math.ceil(g.W / 150) + 2, y1: 0.28, speed: 1.5 }); },
+    paintSky(p, g) { F.makeClouds(g, ['#56685f', '#8a9c8c', '#a6b6a4', '#c4cfbd'], { n: Math.ceil(g.Wu / 150) + 2, y1: 0.28, speed: 1.5 }); },
     paint(p, g) {
       K.range(p, g.rand, { y: g.hz - r(6 * g.k), height: 26 * g.k, width: 100 * g.k, ramp: ['#33443e', '#4c5f55', '#56695d', '#627566', '#738670'], round: true });
       for (let x = r(g.rand() * 40); x < g.W; x += r((50 + g.rand() * 60) * g.k)) K.deadTree(p, x, g.hz + 2, r((30 + g.rand() * 20) * g.k), ['#1c241e', '#3d4a3c', '#4c5a48', '#5e6c56']);
-      K.ground(p, g.rand, g.hz, ['#25321f', '#41552f', '#4f663a', '#6a8248'], { tufts: 0.007 });
+      K.ground(p, g.rand, g.hz, ['#25321f', '#41552f', '#4f663a', '#6a8248'], { u: g.u, tufts: 0.007 });
       const y0 = g.hz + r((g.H - g.hz) * 0.25);
       g.water = [y0, g.H];
       const edge = x => Math.sin(x * 0.05) * 2 + Math.sin(x * 0.013) * 4;
       p.shape(0, y0 - 8, g.W, g.H, (x, y) => y >= y0 + edge(x), (x, y) => ((y - y0) < 3 ? '#5f7a5a' : (y - y0) < 20 * g.k ? '#40594a' : '#334a3e'), '#1d2b23');
-      for (let i = 0; i < g.W / 30; i++) {
+      for (let i = 0; i < g.Wu / 30; i++) {
         const x = r(g.rand() * g.W), y = y0 + r(8 + g.rand() * (g.H - y0 - 10)), w = r((5 + g.rand() * 4) * g.k);
         K.dome(p, x, y, w, Math.max(2, r(w * 0.4)), ['#3d6b34', '#5a8f44', '#79b058'], '#22401f');
         if (g.rand() > 0.6) { p.set(x, y - 2, '#ff9bd0'); p.set(x + 1, y - 2, '#ffd0ea'); }
@@ -676,7 +697,7 @@ const PAL = {
     },
     behind: (ctx, t, g) => F.clouds(ctx, t, g),
     front(ctx, t, g) {
-      F.shimmer(ctx, t, 0, g.water[0] + 4, g.W, g.H, ['#7f9c86', '#9ab79c'], Math.ceil(g.W / 25), 1.5);
+      F.shimmer(ctx, t, 0, g.water[0] + 4, g.W, g.H, ['#7f9c86', '#9ab79c'], Math.ceil(g.Wu / 25), 1.5);
       F.fog(ctx, t, g, { n: 7, y0: g.hz - 6, y1: g.H, color: '#c9d6c433', speed: 2 });
       F.twinkle(ctx, t, g, { n: 9, colors: ['#e9ff8a', '#c6f06a'], y0: g.hz - 20, y1: g.H, drift: 6 });
     },
@@ -732,7 +753,10 @@ function sceneLayers(type, W, H, stage = false) {
   let sc = sceneCache.get(key);
   if (sc) return sc;
   const def = SCENES[type] || SCENES.meadow;
-  const g = { W, H, hz: Math.round(H * 0.56), k: Math.max(0.5, Math.min(1.7, H / 300, W / 200)), rand: PixelKit.rng(type), ceiling: 0 };
+  // k scales props to the screen. u and px scale the moving parts and fine textures, which were
+  // designed at k ≈ 1.3 (art pixels twice the sprites' size); Wu is the width in those units.
+  const k = Math.max(0.5, Math.min(3.4, H / 300, W / 200)), u = Math.max(1, k / 1.3);
+  const g = { W, H, hz: Math.round(H * 0.56), k, u, px: Math.max(1, Math.round(u)), Wu: W / u, rand: PixelKit.rng(type), ceiling: 0 };
   const sky = new PixelKit.Pix(W, H);
   PixelKit.sky(sky, def.sky, Math.round(H * 0.62));
   def.paintSky?.(sky, g);
@@ -746,7 +770,7 @@ function sceneLayers(type, W, H, stage = false) {
   // A scene registered by a later script isn't cached under the meadow stand-in.
   if (SCENES[type]) sceneCache.set(key, sc);
   // Keep a few (the background and the battle stage), dropping the oldest.
-  if (sceneCache.size > 4) sceneCache.delete(sceneCache.keys().next().value);
+  if (sceneCache.size > 3) sceneCache.delete(sceneCache.keys().next().value);
   return sc;
 }
 
@@ -755,6 +779,7 @@ function sceneLayers(type, W, H, stage = false) {
 function paintScene(ctx, type, W, H, t, { stage = false, frontCtx = null } = {}) {
   const { def, g, sky, land, front } = sceneLayers(type, W, H, stage);
   const f = frontCtx || ctx;
+  SceneFx.use(g);
   for (const c of new Set([ctx, f])) { c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.imageSmoothingEnabled = false; }
   ctx.drawImage(sky, 0, 0);
   def.behind?.(ctx, t, g);
@@ -780,7 +805,7 @@ let stepResidents = () => {};
     if (key === shown && now - last < FRAME_MS) return;
     last = now;
     shown = key;
-    if (front && (front.width !== world.width || front.height !== world.height)) {
+    if (front && (front.width !== world.width || front.height !== world.height || front.style.width !== world.style.width || front.style.height !== world.style.height)) {
       front.width = world.width;
       front.height = world.height;
       front.style.width = world.style.width;

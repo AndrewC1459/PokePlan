@@ -53,9 +53,9 @@
     paintScene(bctx, type, W, H, 0, { stage: true });
     const ramp = (SCENES[type] || SCENES.meadow).pad || ['#3a6a35', '#5f9a48', '#79b657', '#a5d77a'];
     const { A, T } = spots(fitted);
-    pad(bctx, A.x, A.feet, Math.max(18, A.w * 0.55), ramp);
-    if (T.feet) pad(bctx, T.x, T.feet, Math.max(16, T.w * 0.6), ramp);
-    else if (stage.classList.contains('wild-battle')) pad(bctx, W * 0.78, H * 0.62, 22, ramp);
+    pad(bctx, A.x, A.feet, Math.max(36, A.w * 0.55), ramp);
+    if (T.feet) pad(bctx, T.x, T.feet, Math.max(32, T.w * 0.6), ramp);
+    else if (stage.classList.contains('wild-battle')) pad(bctx, W * 0.78, H * 0.62, 44, ramp);
   }
   new MutationObserver(() => { if ($('#attackScreen').classList.contains('active')) paintBackdrop(); })
     .observe($('#attackScreen'), { attributes: true, attributeFilter: ['class'] });
@@ -441,7 +441,7 @@
       stage.style.setProperty('--quake', '0px');
       wildImg.style.translate = '';
     }
-    zoom = clamp(fitted.H / 120, 1, 2.2);
+    zoom = clamp(fitted.H / 120, 1, 3.6);
     ctx = actx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;

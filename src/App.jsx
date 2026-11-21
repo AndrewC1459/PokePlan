@@ -82,6 +82,10 @@ const UPDATES = [
       'New attack animations for all 18 types, from Razor Leaf and Hydro Pump to Moonblast. Tackles, claws, and bites lunge into the target.',
       'Battles now take place in your current biome, with a ground pad under each Pokémon.',
       'Wild Pokémon fit into the scenery: fliers keep to open sky above trees and pillars and below cave ceilings, walkers pass behind close-up rocks and bushes, and swimmers stay in the water.',
+      'The scenery now uses the same pixel size as the Pokémon, so they look like they belong together.',
+      'Wild Pokémon come and go: they cross the whole screen and leave, and new ones (often a different species) wander in. Walkers stop now and then, ghosts drift low over the ground, and rare Pokémon show up less often.',
+      'Walkers stand on the ground with a shadow, and swimmers sit low in the water with a ripple.',
+      'Each biome’s wildlife fits it better: no Zubat out in the open sky, Hoothoot and Noctowl now fly, and Venonat walks.',
     ],
   },
   {
