@@ -879,10 +879,16 @@ let drawWorld = () => {};
 const ambientLayer = $('#ambientLayer');
 let drawResidents = () => {}; // fills ambientLayer with wildlife; the habitat scripts assign the real one
 
+// The scenery is real pixel art: the canvas holds one pixel per art pixel, shown at a whole number
+// of screen pixels each (about 2 CSS pixels, close to the sprites), so every pixel stays crisp.
+let worldPixel = 2;
 function resizeWorld() {
-  const dpr = Math.min(devicePixelRatio || 1, 2);
-  world.width = Math.max(1, Math.floor(innerWidth * dpr));
-  world.height = Math.max(1, Math.floor(innerHeight * dpr));
+  const dpr = devicePixelRatio || 1;
+  worldPixel = Math.max(2, Math.round(2 * dpr)) / dpr;
+  world.width = Math.max(1, Math.ceil(innerWidth / worldPixel));
+  world.height = Math.max(1, Math.ceil(innerHeight / worldPixel));
+  world.style.width = world.width * worldPixel + 'px';
+  world.style.height = world.height * worldPixel + 'px';
   wctx.imageSmoothingEnabled = false;
 }
 addEventListener('resize', resizeWorld);

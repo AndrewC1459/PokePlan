@@ -50,12 +50,11 @@
   });
 
   // ---- The lead battles ------------------------------------------------------------------------
-  // Until each type gets its own animation, borrow the closest of the three existing ones.
-  const ANIMATION = { fire: 'fire', dragon: 'fire', electric: 'electric', steel: 'electric', ice: 'electric', fairy: 'electric' };
+  // Every type has its own attack animation (07-attacks.js), picked by the lead's main type.
   battler = () => {
     const m = caughtLead();
     if (!m) return P[pokemon];
-    return { name: nameOf(m), sprite: spriteOf(m), move: L.moveFor(m), level: L.levelFor(m.xp), type: ANIMATION[L.speciesInfo(m.species)?.types[0]] || 'ghost' };
+    return { name: nameOf(m), sprite: spriteOf(m), move: L.moveFor(m), level: L.levelFor(m.xp), type: L.speciesInfo(m.species)?.types[0] || 'normal' };
   };
 
   // ---- Partner card: shows the lead, plus a row for the party -------------------------------

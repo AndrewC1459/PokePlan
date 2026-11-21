@@ -3,6 +3,8 @@ export default function AttackOverlay() {
     <div className="attack-screen" id="attackScreen">
       <div className="attack-box">
         <div className="attack-stage" id="attackStage">
+          {/* Today's biome behind the fight, then the attack effects (see game/07-attacks.js). */}
+          <canvas id="battleBackdrop" aria-hidden="true" />
           <canvas id="attackCanvas" />
           <div className="attack-name" id="attackName" />
           <img className="attacker" id="attacker" alt="" />

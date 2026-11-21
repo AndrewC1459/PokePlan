@@ -2,7 +2,7 @@
 // Frosted Tundra (Ice), Summit Dojo (Fighting), Iron Works (Steel) and Fairy Glade (Fairy).
 // They aren't any starter's home; they're registered under `wild` so the team script (11-team.js)
 // adds them to the shared biome list and every trainer can visit them with a lead of that type.
-// The scenery uses the same 640×360 pixel grid and helpers as 09-more-habitats.js.
+// Their pixel scenery uses the kit in 04-pixel-world.js.
 (() => {
   habitatList.wild = [
     { name: 'Frosted Tundra', description: 'Snow drifts over frozen ponds.', type: 'tundra' },
@@ -18,140 +18,192 @@
     glade: [[12, F], [35, W], [113, W], [173, W], [175, W], [187, FL], [209, W], [280, W], [298, W], [439, W], [546, FL], [548, W]],
   };
 
-  const palettes = {
-    tundra: { sky: ['#8fb8d8', '#b9d4e8', '#dfeaf3'], far: '#c3d5e6', mid: '#a6c0d6', near: '#eef4f8', ground: '#dbe7f0', accent: '#ffffff', ice: '#a9dcef' },
-    dojo: { sky: ['#ee9f63', '#f5c286', '#fbe1b2'], far: '#a87878', mid: '#86606a', near: '#c9a46a', ground: '#b38955', accent: '#fff0c0' },
-    foundry: { sky: ['#6e7987', '#8b95a1', '#b5ad9c'], far: '#4c5561', mid: '#5c6570', near: '#6a7179', ground: '#555b63', accent: '#ffcf4a' },
-    glade: { sky: ['#c6b3e6', '#e4c6ec', '#fae1ef'], far: '#b6d5c3', mid: '#9ccaae', near: '#bde2c6', ground: '#a3d4af', accent: '#fff6a8' },
+  const K = PixelKit, Fx = SceneFx, r = Math.round;
+
+  SCENES.tundra = {
+    sky: ['#7ea9d6', '#93b9de', '#a9c9e6', '#c1d9ee', '#dbe9f5'],
+    pad: ['#7d93ad', '#bccde0', '#d8e5f1', '#ffffff'],
+    paintSky(p, g) {
+      K.dome(p, r(g.W * 0.72), r(g.H * 0.13), 8 * g.k + 4, 8 * g.k + 4, ['#fff1c8', '#fff8e4', '#ffffff'], '#e8d6a8');
+      Fx.makeClouds(g, PAL.cloud, { n: Math.ceil(g.W / 180) + 2, y1: 0.22 });
+    },
+    paint(p, g) {
+      const snow = ['#c4d6ea', '#ffffff'];
+      K.range(p, g.rand, { y: g.hz - r(10 * g.k), height: 110 * g.k, width: 90 * g.k, ramp: ['#3e5270', '#62789a', '#7590b0', '#8eaac8', '#b0c8e0'], snow, cap: 0.45 });
+      K.range(p, g.rand, { y: g.hz + 2, height: 30 * g.k, width: 100 * g.k, ramp: ['#6d86a6', '#bccde0', '#cfdcea', '#e4edf6', '#ffffff'], round: true });
+      for (let x = r(g.rand() * 30); x < g.W; x += r((30 + g.rand() * 50) * g.k)) {
+        K.pine(p, x, g.hz + r((4 + g.rand() * 8) * g.k), r((30 + g.rand() * 20) * g.k), ['#173a38', '#24524c', '#2f665c', '#3c7a6a'], ['#2a1e18', '#4a3424'], snow);
+      }
+      K.ground(p, g.rand, g.hz + r(8 * g.k), ['#7d93ad', '#c4d6ea', '#e2ecf6', '#ffffff'], { tufts: 0.002, pebble: true });
+      // A frozen pond with cracks and a shine.
+      const px = r(g.W * 0.62), py = g.hz + r((g.H - g.hz) * 0.5), pw = r(Math.min(g.W * 0.2, 90 * g.k));
+      K.dome(p, px, py, pw, r(9 * g.k), ['#6aa8cc', '#8cc4e0', '#b0dcf0', '#d8f0fa'], '#4a7a9a');
+      K.strokes(p, [[px - pw * 0.4, py - 2, px - pw * 0.1, py + 2], [px - pw * 0.1, py + 2, px + pw * 0.2, py - 1]], 1, '#ffffff');
+      for (let x = r(g.rand() * 80); x < g.W; x += r((90 + g.rand() * 90) * g.k)) K.rock(p, x, g.hz + r((16 + g.rand() * 60) * g.k), r(14 * g.k), r(7 * g.k), ['#4a5a70', '#8a9ab0', '#a8b8cc', '#d8e4f0', '#ffffff']);
+    },
+    behind: (ctx, t, g) => Fx.clouds(ctx, t, g),
+    front(ctx, t, g) {
+      Fx.fall(ctx, t, g, { n: Math.ceil(g.W / 7), seed: 8, vx: 6, vy: 18, colors: ['#ffffff', '#e4eef8'], sway: 6 });
+      Fx.fall(ctx, t, g, { n: Math.ceil(g.W / 30), seed: 9, vx: 10, vy: 28, colors: ['#ffffff'], w: 2, h: 2, sway: 8 });
+    },
   };
 
-  const baseTerrain = drawWorld;
-  function newTerrain() {
-    const type = activeBiome?.type, p = palettes[type];
-    if (!p) return baseTerrain();
-    const Wd = world.width, Ht = world.height, sx = Wd / 640, sy = Ht / 360, t = performance.now() / 1000, g = 4;
-    wctx.setTransform(1, 0, 0, 1, 0, 0);
-    wctx.imageSmoothingEnabled = false;
-    wctx.clearRect(0, 0, Wd, Ht);
-    const snap = n => Math.round(n / g) * g;
-    // Round the edges, not the size, so neighbouring blocks always meet (no 1px gaps between bands).
-    const rect = (x, y, w, h, c) => { const X = Math.round(x * sx), Y = Math.round(y * sy); wctx.fillStyle = c; wctx.fillRect(X, Y, Math.max(1, Math.round((x + w) * sx) - X), Math.max(1, Math.round((y + h) * sy) - Y)); };
-    const poly = (pts, c) => { wctx.beginPath(); wctx.moveTo(snap(pts[0][0]) * sx, snap(pts[0][1]) * sy); for (let i = 1; i < pts.length; i++) wctx.lineTo(snap(pts[i][0]) * sx, snap(pts[i][1]) * sy); wctx.closePath(); wctx.fillStyle = c; wctx.fill(); };
-    const ridge = (y, amp, phase, c, step = 16) => { const pts = [[0, 360]]; for (let x = 0; x <= 640; x += step) pts.push([x, y + Math.sin(x * .018 + phase) * amp + Math.sin(x * .043 + phase * .7) * amp * .22]); pts.push([640, 360]); poly(pts, c); };
-    const cloud = (x, y, k, c) => { rect(x, y, 38 * k, 8 * k, c); rect(x + 8 * k, y - 8 * k, 23 * k, 8 * k, c); rect(x + 23 * k, y + 8 * k, 25 * k, 5 * k, c); };
-    // A pixel line made of square blocks, for girders and banner poles.
-    const line = (x1, y1, x2, y2, c, size = 3) => { const n = Math.max(1, Math.ceil(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)) / 3)); for (let i = 0; i <= n; i++) rect(x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n, size, size, c); };
-    const sparkle = (x, y, c) => { rect(x, y - 3, 2, 8, c); rect(x - 3, y, 8, 2, c); };
-
-    for (let y = 0; y < 360; y += 12) rect(0, y, 640, 12, y < 52 ? p.sky[0] : y < 112 ? p.sky[1] : p.sky[2]);
-
-    if (type === 'tundra') {
-      rect(462, 40, 40, 40, '#fff7e4'); rect(454, 48, 56, 24, '#fff7e455');
-      for (let i = 0; i < 5; i++) cloud((i * 151 + t * (1.2 + i * .2)) % 760 - 68, 30 + (i % 3) * 22, .8, '#ffffffaa');
-      // Far peaks with snow caps.
-      const peaks = [[0, 214], [64, 150], [116, 196], [184, 112], [252, 198], [324, 140], [400, 204], [472, 118], [544, 192], [604, 148], [640, 176]];
-      poly([[0, 360], ...peaks, [640, 360]], p.far);
-      for (const [x, y] of peaks) if (y < 160) poly([[x - 22, y + 24], [x, y], [x + 22, y + 24], [x + 10, y + 18], [x, y + 26], [x - 10, y + 18]], '#ffffff');
-      ridge(236, 10, t * .01, p.mid);
-      rect(0, 262, 640, 98, p.near); rect(0, 304, 640, 56, p.ground);
-      // Frozen pond.
-      poly([[236, 304], [290, 290], [410, 290], [462, 304], [410, 318], [290, 318]], p.ice);
-      for (let i = 0; i < 4; i++) rect(290 + i * 34, 298 + (i % 2) * 8, 22, 2, '#ffffffcc');
-      // Snowy pines.
-      for (const [x, k] of [[40, 1.2], [118, .9], [520, 1.1], [598, 1.3]]) {
-        rect(x + 8 * k, 300 - 10 * k, 6 * k, 12 * k, '#6b4f3a');
-        for (let s = 0; s < 3; s++) {
-          const top = 300 - 64 * k + s * 18 * k, half = (14 + s * 7) * k;
-          poly([[x + 11 * k - half, top + 22 * k], [x + 11 * k, top], [x + 11 * k + half, top + 22 * k]], '#2f5d55');
-          poly([[x + 11 * k - half * .6, top + 10 * k], [x + 11 * k, top], [x + 11 * k + half * .6, top + 10 * k]], '#ffffff');
-        }
-      }
-      for (let i = 0; i < 20; i++) if ((i + Math.floor(t * 2)) % 5 === 0) rect((i * 71 + 13) % 640, 270 + (i * 29) % 80, 2, 2, '#ffffff');
-      // Falling snow.
-      for (let i = 0; i < 90; i++) { const x = (i * 47 + Math.sin(t * .8 + i) * 12 + 660) % 660 - 10, y = (i * 67 + t * (16 + (i % 5) * 6)) % 380 - 20; rect(x, y, i % 3 ? 2 : 3, i % 3 ? 2 : 3, '#ffffffdd'); }
-    } else if (type === 'dojo') {
-      rect(286, 112, 76, 76, p.accent); rect(278, 120, 92, 60, '#fff0c044');
-      for (let i = 0; i < 4; i++) cloud((i * 173 + t * (1.5 + i * .3)) % 780 - 80, 28 + (i % 2) * 26, .9, '#fde6c4bb');
-      ridge(188, 26, t * .004, p.far); ridge(226, 14, t * .007, p.mid);
-      rect(0, 258, 640, 102, p.near); rect(0, 304, 640, 56, p.ground);
-      for (let i = 0; i < 36; i++) rect((i * 53) % 640, 266 + (i * 19) % 88, 3, 2, i % 2 ? '#b6915a' : '#dcbc85');
-      // The dojo: walls, frame, two-tier roof with upturned eaves, steps.
-      const dx = 392;
-      rect(dx, 214, 168, 52, '#ecdfc2');
-      for (let i = 0; i <= 6; i++) rect(dx + i * 27, 214, 4, 52, '#7a4a2c');
-      rect(dx, 238, 168, 3, '#7a4a2c'); rect(dx + 64, 228, 40, 38, '#4a3428');
-      poly([[dx - 22, 216], [dx + 190, 216], [dx + 166, 194], [dx + 2, 194]], '#3d3949');
-      rect(dx - 26, 210, 8, 6, '#3d3949'); rect(dx + 186, 210, 8, 6, '#3d3949');
-      rect(dx + 30, 180, 108, 14, '#ecdfc2');
-      poly([[dx + 16, 182], [dx + 152, 182], [dx + 136, 164], [dx + 32, 164]], '#3d3949');
-      rect(dx + 12, 176, 6, 6, '#3d3949'); rect(dx + 150, 176, 6, 6, '#3d3949');
-      for (let s = 0; s < 3; s++) rect(dx + 56 - s * 8, 266 + s * 6, 56 + s * 16, 6, s % 2 ? '#a99d8c' : '#bdb2a1');
-      // Banners on poles, waving.
-      for (const bx of [338, 604]) {
-        rect(bx, 168, 4, 98, '#5d3a24'); rect(bx - 2, 164, 8, 6, '#c9a24a');
-        for (let i = 0; i < 6; i++) { const wave = Math.sin(t * 3 + i * .7 + bx) * 3; rect(bx + 4 + i * 5, 176 + wave, 5, 40, i === 2 ? '#f6ead0' : '#c4423a'); }
-      }
+  SCENES.dojo = {
+    sky: ['#e2794f', '#ec9460', '#f3ae72', '#f7c88c', '#fadcaa'],
+    pad: ['#8a6440', '#bc9460', '#cfa870', '#e6c68e'],
+    paintSky(p, g) {
+      K.dome(p, r(g.W * 0.2), r(g.hz - 40 * g.k), 18 * g.k + 4, 18 * g.k + 4, ['#ffd27a', '#ffe59e', '#fff4d0'], '#f0a050');
+      Fx.makeClouds(g, ['#c9805a', '#f0c49a', '#fbdcbc', '#fff2e0'], { n: Math.ceil(g.W / 180) + 2, y1: 0.24 });
+    },
+    paint(p, g) {
+      K.range(p, g.rand, { y: g.hz - r(6 * g.k), height: 90 * g.k, width: 100 * g.k, ramp: ['#4a2e3a', '#7a4f5a', '#8c5c64', '#a06c70', '#b88080'] });
+      K.range(p, g.rand, { y: g.hz + 2, height: 24 * g.k, width: 90 * g.k, ramp: ['#3a4a2c', '#5a7040', '#68804a', '#7a9456', '#94ae6a'], round: true });
+      K.ground(p, g.rand, g.hz + r(6 * g.k), ['#5a3e24', '#a8804e', '#c49a62', '#dcb67a'], { tufts: 0.004, pebble: true });
+      // The dojo: plaster walls with timber frames, a two-tier roof with upturned eaves, and steps.
+      const dx = r(g.W * 0.66), base = g.hz + r(10 * g.k), w = r(64 * g.k), wh = r(26 * g.k);
+      g.dojo = [dx, base, w];
+      p.shape(dx - w, base - wh, dx + w, base, () => true, (x, y) => {
+        const i = Math.floor((x - (dx - w)) / (16 * g.k));
+        if (Math.abs(x - (dx - w + i * 16 * g.k)) < 1.5 || y === base - wh + r(10 * g.k)) return '#6a3e24';
+        return Math.abs(x - dx) < 12 * g.k && y > base - wh + 12 * g.k ? '#3e2a20' : '#efe2c4';
+      }, '#3a2214');
+      const roof = (y, half, h) => K.poly(p, [[dx - half - 6 * g.k, y + 3], [dx - half - 9 * g.k, y - 2], [dx - half + 6 * g.k, y - h], [dx + half - 6 * g.k, y - h], [dx + half + 9 * g.k, y - 2], [dx + half + 6 * g.k, y + 3]],
+        (x, yy) => (yy < y - h + 3 ? '#5c5a76' : yy > y - 1 ? '#2a2838' : '#45435c'), '#1c1a28');
+      roof(base - wh, w + 8 * g.k, 14 * g.k);
+      p.shape(dx - w * 0.6, base - wh - 26 * g.k, dx + w * 0.6, base - wh - 12 * g.k, () => true, '#efe2c4', '#3a2214');
+      roof(base - wh - 24 * g.k, w * 0.7, 12 * g.k);
+      p.shape(dx - 5 * g.k, base - wh - 40 * g.k, dx + 5 * g.k, base - wh - 34 * g.k, () => true, '#d8a840', '#5a3e14');
+      for (let s = 0; s < 3; s++) p.shape(dx - 14 * g.k - s * 3, base + s * 3, dx + 14 * g.k + s * 3, base + s * 3 + 3, () => true, s % 2 ? '#a89c8a' : '#c4b8a4', '#4a4238');
       // Wooden training posts.
-      for (const [x, k] of [[70, 1], [160, .9]]) {
-        rect(x, 300 - 56 * k, 10 * k, 56 * k, '#8a5a36'); rect(x - 12 * k, 300 - 42 * k, 34 * k, 5 * k, '#8a5a36');
-        rect(x - 2 * k, 300 - 52 * k, 14 * k, 8 * k, '#a8744a'); rect(x - 2 * k, 300 - 22 * k, 14 * k, 8 * k, '#a8744a');
+      for (let x = r(g.W * 0.08); x < dx - w - 30 * g.k; x += r((60 + g.rand() * 40) * g.k)) {
+        const y = g.hz + r((20 + g.rand() * 30) * g.k), h = r(34 * g.k);
+        p.shape(x - 3 * g.k, y - h, x + 3 * g.k, y, () => true, (xx) => (xx < x ? '#b07a4a' : '#8a5a36'), '#3e2414');
+        p.shape(x - 10 * g.k, y - h * 0.75, x + 10 * g.k, y - h * 0.75 + 3 * g.k, () => true, '#8a5a36', '#3e2414');
+        p.shape(x - 4 * g.k, y - h * 0.35, x + 4 * g.k, y - h * 0.35 + 5 * g.k, () => true, '#e8d8b0', '#3e2414');
       }
-      // Leaves drifting on the wind.
-      for (let i = 0; i < 26; i++) { const x = (i * 79 + t * (30 + (i % 4) * 8)) % 700 - 30, y = (i * 41 + Math.sin(t * 1.5 + i) * 14 + t * 10) % 300 + 20; rect(x, y, 4, 2, i % 3 ? '#e07b4a' : '#f2b24e'); }
-    } else if (type === 'foundry') {
-      rect(120, 46, 36, 36, '#d8cfb8aa');
-      // Factory skyline with sawtooth roofs and smokestacks.
-      for (const [x, w, h] of [[0, 120, 88], [140, 90, 70], [330, 130, 96], [500, 140, 80]]) {
-        rect(x, 230 - h, w, h + 40, p.far);
-        for (let s = 0; s < w; s += 22) poly([[x + s, 230 - h], [x + s + 22, 230 - h - 14], [x + s + 22, 230 - h]], p.far);
+      g.poles = [dx - w - r(22 * g.k), dx + w + r(22 * g.k)].filter(x => x > 4 && x < g.W - 4);
+      for (const x of g.poles) p.shape(x - 1, base - r(56 * g.k), x + 2, base, () => true, '#5a3a22', '#2a180c');
+    },
+    behind: (ctx, t, g) => Fx.clouds(ctx, t, g),
+    front(ctx, t, g) {
+      // Banners snapping in the wind: each column moves with its own phase.
+      const [, base] = g.dojo;
+      for (const x of g.poles) for (let i = 0; i < 6; i++) {
+        const wave = Math.round(Math.sin(t * 6 + i * 0.9 + x) * 2 * g.k), y = base - r(52 * g.k) + wave, h = r(24 * g.k);
+        Fx.dot(ctx, x + 2 + i * 3, y - 1, 3, h + 2, '#4a1a16');
+        Fx.dot(ctx, x + 2 + i * 3, y, 3, h, i === 2 || i === 3 ? '#f6ead0' : '#c4423a');
       }
-      const stacks = [[96, 92], [262, 120], [446, 110], [586, 96]];
-      for (const [x, h] of stacks) {
-        rect(x, 230 - h - 40, 16, h + 40, '#3c434d');
-        for (let b = 0; b < 3; b++) rect(x, 230 - h - 32 + b * 22, 16, 5, b % 2 ? '#e6e1d6' : '#b84a3a');
-        if ((Math.floor(t * 2) + x) % 3) rect(x + 6, 230 - h - 46, 4, 4, '#ff5a4a');
-        // Smoke puffs drifting up and away.
-        for (let k = 0; k < 5; k++) {
-          const ph = (t * .22 + k * .2 + x * .001) % 1, size = 8 + ph * 22;
-          rect(x + 8 + ph * 46 - size / 2, 230 - h - 44 - ph * 110, size, size * .7, `rgba(210,206,198,${(.55 - ph * .5).toFixed(2)})`);
+      Fx.fall(ctx, t, g, { n: Math.ceil(g.W / 30), seed: 10, vx: 30, vy: 10, colors: ['#e07b4a', '#f2b24e', '#c4423a'], w: 2, h: 1, sway: 10 });
+    },
+  };
+
+  SCENES.foundry = {
+    sky: ['#55606e', '#66717e', '#7a838c', '#949a9c', '#aeaea4'],
+    pad: ['#2e3238', '#50565e', '#60666e', '#7a8088'],
+    paintSky(p, g) { Fx.makeClouds(g, ['#56606a', '#868e96', '#a0a6ac', '#bcc0c2'], { n: Math.ceil(g.W / 150) + 2, y1: 0.25, speed: 1.5 }); },
+    paint(p, g) {
+      // Factory halls with sawtooth roofs, lit windows, and striped smokestacks.
+      g.stacks = [];
+      for (let x = r(-g.rand() * 40); x < g.W; x += r((80 + g.rand() * 60) * g.k)) {
+        const w = r((50 + g.rand() * 40) * g.k), h = r((30 + g.rand() * 40) * g.k), top = g.hz - h;
+        p.shape(x, top, x + w, g.hz + 2, (xx, yy) => yy >= top + (((xx - x) % r(14 * g.k)) * 0.6), (xx, yy) => (yy < top + 10 * g.k && ((xx - x) % r(14 * g.k)) < 3 ? '#7a828e' : '#4c535e'), '#22262e');
+        for (let wy = top + r(14 * g.k); wy < g.hz - 6; wy += r(10 * g.k)) for (let wx = x + 4; wx < x + w - 6; wx += r(9 * g.k)) {
+          p.shape(wx, wy, wx + r(5 * g.k), wy + r(4 * g.k), () => true, K.hash(wx, wy) > 0.35 ? '#ffd86a' : '#2e3440', '#22262e');
+        }
+        if (g.rand() > 0.35) {
+          const sx = x + r(w * (0.2 + g.rand() * 0.6)), sh = h + r((30 + g.rand() * 30) * g.k), sw = r(8 * g.k);
+          p.shape(sx, g.hz - sh, sx + sw, g.hz, () => true, (xx, yy) => {
+            const band = Math.floor((yy - (g.hz - sh)) / (6 * g.k));
+            if (band === 1 || band === 3) return band === 1 ? '#c4423a' : '#e8e4da';
+            return xx < sx + sw / 3 ? '#5e6672' : '#434a55';
+          }, '#1e2228');
+          g.stacks.push([sx + sw / 2, g.hz - sh]);
         }
       }
-      // Steel girder framework.
-      rect(0, 236, 640, 6, p.mid); rect(0, 252, 640, 4, p.mid);
-      for (let x = 0; x < 640; x += 64) { rect(x, 236, 6, 30, p.mid); line(x, 242, x + 64, 252, '#7d8792'); line(x, 252, x + 64, 242, '#7d8792'); }
-      rect(0, 264, 640, 96, p.near); rect(0, 312, 640, 48, p.ground);
-      // Hazard stripe and a moving conveyor of crates.
-      for (let x = 0; x < 640; x += 16) rect(x, 300, 8, 6, p.accent), rect(x + 8, 300, 8, 6, '#2b2f35');
-      rect(0, 286, 640, 8, '#2b2f35');
-      for (let x = 0; x < 640; x += 12) rect((x + t * 30) % 640, 288, 4, 2, '#4a5058');
-      for (let i = 0; i < 6; i++) { const x = (i * 128 + t * 30) % 760 - 60; rect(x, 266, 26, 20, '#a5643f'); rect(x + 2, 268, 22, 2, '#c07a50'); rect(x + 11, 266, 4, 20, '#7d4a2e'); }
-      // Welding sparks now and then.
-      if (Math.floor(t * 4) % 5 < 2) for (let i = 0; i < 6; i++) rect(214 + Math.sin(t * 30 + i) * 10, 250 + Math.cos(t * 23 + i) * 8, 2, 2, i % 2 ? '#ffe08a' : '#ffffff');
-    } else if (type === 'glade') {
-      rect(480, 36, 46, 46, '#fff8dc'); rect(470, 46, 66, 26, '#fff8dc66');
-      for (let i = 0; i < 5; i++) cloud((i * 149 + t * (1.3 + i * .25)) % 760 - 70, 26 + (i % 3) * 24, .8, i % 2 ? '#ffd9eabb' : '#ffffffaa');
-      ridge(198, 18, t * .006, p.far); ridge(232, 12, t * .01, p.mid);
-      rect(0, 262, 640, 98, p.near); rect(0, 304, 640, 56, p.ground);
-      // Giant toadstools with a soft pulsing glow.
-      for (const [x, k, cap] of [[44, 1.3, '#f08cb4'], [150, .8, '#b98cf0'], [470, 1, '#f5a0c8'], [574, 1.4, '#9cc4f5']]) {
-        const pulse = (Math.sin(t * 1.6 + x) + 1) / 2;
-        rect(x - 30 * k, 300 - 74 * k, 84 * k, 58 * k, `rgba(255,220,240,${(.08 + pulse * .12).toFixed(2)})`);
-        rect(x + 4 * k, 300 - 40 * k, 16 * k, 40 * k, '#f6eedc');
-        poly([[x - 18 * k, 300 - 38 * k], [x - 8 * k, 300 - 62 * k], [x + 12 * k, 300 - 70 * k], [x + 32 * k, 300 - 62 * k], [x + 42 * k, 300 - 38 * k]], cap);
-        for (const [ox, oy] of [[-4, -50], [10, -60], [24, -48], [6, -44]]) rect(x + ox * k, 300 + oy * k, 5 * k, 4 * k, '#fff6fb');
+      // Steel girders and a hazard-striped walkway.
+      const gy = g.hz + r(6 * g.k), gh = r(14 * g.k);
+      p.rect(0, gy, g.W, 2, '#3a4048'); p.rect(0, gy + gh, g.W, 2, '#3a4048');
+      for (let x = 0; x < g.W; x += r(28 * g.k)) {
+        K.strokes(p, [[x, gy, x + 28 * g.k, gy + gh], [x, gy + gh, x + 28 * g.k, gy]], 1.6, '#6a7480');
+        p.rect(x, gy, 2, gh, '#3a4048');
       }
-      // Flowers swaying in the grass.
+      K.ground(p, g.rand, gy + gh + 2, ['#1e2228', '#3e444c', '#4a5058', '#5e646c'], { tufts: 0.004, pebble: true });
+      const sy = gy + gh + r(8 * g.k);
+      for (let x = 0; x < g.W; x += 8) { p.rect(x, sy, 4, 3, '#f2c230'); p.rect(x + 4, sy, 4, 3, '#2a2e34'); }
+      g.belt = sy + 4;
+      p.rect(0, g.belt + 6, g.W, 3, '#2a2e34');
+    },
+    behind: (ctx, t, g) => Fx.clouds(ctx, t, g),
+    front(ctx, t, g) {
+      for (const [x, y] of g.stacks) {
+        Fx.each(4, r(x), (i) => {
+          const life = (t * 0.3 + i / 4) % 1, s = r((4 + life * 12) * g.k);
+          Fx.dot(ctx, x - s / 2 + life * 24 * g.k, y - 3 - life * 50 * g.k, s, r(s * 0.7), life < 0.5 ? '#9aa0a6' : '#b8bcbe');
+        });
+        if (Math.floor(t * 2 + x) % 3) Fx.dot(ctx, x, y - 2, 1, 1, '#ff5a4a');
+      }
+      // Crates riding the conveyor.
+      const s = r(9 * g.k);
+      for (let i = 0; i * 60 * g.k < g.W + 60; i++) {
+        const x = K.wrap(i * 60 * g.k + t * 20, g.W + 60) - 30;
+        Fx.dot(ctx, x - 1, g.belt - s, s + 2, s + 1, '#3e2414'); Fx.dot(ctx, x, g.belt - s + 1, s, s - 1, '#b07a4a'); Fx.dot(ctx, x, g.belt - s + 1, s, 1, '#d8a070');
+      }
+      if (Math.floor(t * 4) % 5 < 2) Fx.each(6, Math.floor(t * 8), (i, a, b) => Fx.dot(ctx, g.W * 0.3 + (a - 0.5) * 12, g.hz + 4 + (b - 0.5) * 8, 1, 1, i % 2 ? '#ffe08a' : '#ffffff'));
+    },
+  };
+
+  SCENES.glade = {
+    sky: ['#b89ae0', '#cba8e6', '#ddb9ea', '#edcbec', '#f9dfef'],
+    pad: ['#5a8a68', '#8cc49c', '#a3d4af', '#c4ecca'],
+    paintSky(p, g) {
+      K.dome(p, r(g.W * 0.78), r(g.H * 0.13), 9 * g.k + 4, 9 * g.k + 4, ['#fff2c0', '#fffae0', '#ffffff'], '#f0d090');
+      Fx.makeClouds(g, ['#c79ad0', '#f6d6ee', '#ffeaf6', '#ffffff'], { n: Math.ceil(g.W / 170) + 2, y1: 0.25 });
+    },
+    paint(p, g) {
+      K.range(p, g.rand, { y: g.hz - r(8 * g.k), height: 40 * g.k, width: 110 * g.k, ramp: ['#6a8a92', '#9cc0c4', '#acd0cc', '#bfded4', '#d6eee0'], round: true });
+      const hills = K.range(p, g.rand, { y: g.hz + 2, height: 22 * g.k, width: 80 * g.k, ramp: ['#4a7a5a', '#7ab48a', '#8cc49c', '#a3d4af', '#c4ecca'], round: true });
+      for (let x = r(g.rand() * 60); x < g.W; x += r((90 + g.rand() * 60) * g.k)) K.tree(p, x, hills[Math.min(g.W - 1, Math.max(0, x))] + 4, r((7 + g.rand() * 3) * g.k), ['#5a4a7a', '#8a6ab0', '#b08ad0', '#d4b0ec', '#f0d8ff'], ['#4a3424', '#7a5634', '#9a7048']);
+      K.ground(p, g.rand, g.hz, ['#4a7a5a', '#7ab48a', '#9ccca8', '#c4ecca'], { tufts: 0.006 });
+      // Giant toadstools and flowers.
+      const caps = [['#7a2a4a', '#c44a7a', '#e870a0', '#ff9cc4', '#ffd6e8'], ['#4a2a7a', '#7a4ac4', '#9c70e8', '#c49cff', '#ecdcff'], ['#2a4a7a', '#4a7ac4', '#70a0e8', '#9cc4ff', '#dcecff']];
+      g.caps = [];
+      for (let x = r(g.rand() * 60); x < g.W; x += r((80 + g.rand() * 80) * g.k)) {
+        const base = g.hz + r((10 + g.rand() * 50) * g.k), s = r((9 + g.rand() * 6) * g.k), ramp = caps[Math.floor(g.rand() * 3)];
+        p.shape(x - s * 0.35, base - s * 1.3, x + s * 0.35, base, () => true, (xx) => (xx < x ? '#fffaf0' : '#e8dcc8'), '#8a7a6a');
+        K.dome(p, x, base - s * 1.2, s, s * 0.8, ramp.slice(1), ramp[0], { floor: base - s * 1.05 });
+        for (const [dx, dy] of [[-0.45, -0.45], [0.2, -0.65], [0.5, -0.3]]) p.rect(r(x + dx * s), r(base - s * 1.2 + dy * s * 0.8), 2, 2, '#ffffff');
+        g.caps.push([x, base - s * 1.2, s]);
+      }
       const petals = ['#ff9ec8', '#fff1a0', '#a8d4ff', '#ffffff', '#d6b0ff'];
-      for (let i = 0; i < 46; i++) {
-        const x = (i * 53 + 17) % 640, y = 276 + (i * 31) % 78, sway = Math.round(Math.sin(t * 2 + i) * 1.5);
-        rect(x + 1, y + 3, 2, 6, '#6aa878'); rect(x + sway - 1, y, 6, 4, petals[i % petals.length]); rect(x + sway + 1, y + 1, 2, 2, '#ffd36a');
+      for (let i = 0; i < g.W * (g.H - g.hz) * 0.003; i++) {
+        const x = r(g.rand() * g.W), y = g.hz + 4 + r(g.rand() * (g.H - g.hz - 4)), c = petals[i % petals.length];
+        p.set(x, y + 1, '#4a7a5a'); p.set(x - 1, y, c); p.set(x + 1, y, c); p.set(x, y - 1, c); p.set(x, y, '#ffd36a');
       }
-      // Twinkles and floating light motes.
-      for (let i = 0; i < 22; i++) if ((i + Math.floor(t * 3)) % 4 === 0) sparkle((i * 89 + 11) % 640, 70 + (i * 53) % 190, i % 2 ? p.accent : '#ffffff');
-      for (let i = 0; i < 18; i++) { const x = (i * 97 + Math.sin(t * .6 + i) * 20 + 640) % 640, y = 300 - ((t * (8 + i % 4 * 3) + i * 41) % 200); rect(x, y, 3, 3, i % 2 ? '#fff6a8cc' : '#ffd1ecbb'); }
-    }
-  }
-  drawWorld = newTerrain;
+    },
+    behind: (ctx, t, g) => Fx.clouds(ctx, t, g),
+    front(ctx, t, g) {
+      Fx.twinkle(ctx, t, g, { n: 22, colors: ['#fff6a8', '#ffffff', '#ffc4ec'], y0: g.H * 0.15, y1: g.H, drift: 5, plus: true });
+      Fx.fall(ctx, t, g, { n: Math.ceil(g.W / 30), seed: 12, vx: 4, vy: -8, colors: ['#ffd1ec', '#fff6a8'], sway: 6 });
+    },
+  };
+
+  // ---- Close-up props at the bottom edge ----
+  SCENES.tundra.fore = (p, g, x, base, s) => {
+    K.pine(p, x, base + r(6 * g.k), r(110 * g.k * s), ['#173a38', '#24524c', '#2f665c', '#3c7a6a'], ['#2a1e18', '#4a3424'], ['#c4d6ea', '#ffffff']);
+    K.rock(p, x + r(34 * g.k), base, r(34 * g.k), r(16 * g.k), ['#4a5a70', '#8a9ab0', '#a8b8cc', '#d8e4f0', '#ffffff']);
+  };
+  SCENES.dojo.fore = (p, g, x, base, s) => K.bush(p, x, base, r(66 * g.k * s), ['#2a3a1e', '#4a6a30', '#5e8240', '#7a9e52']);
+  SCENES.foundry.fore = (p, g, x, base, s) => {
+    const w = r(28 * g.k * s), h = r(36 * g.k * s);
+    p.shape(x - w / 2, base - h, x + w / 2, base, () => true, (xx, yy) => (yy < base - h + 3 ? '#6a7480' : (yy - (base - h)) % r(9 * g.k) < 2 ? '#2e343c' : xx < x - w / 4 ? '#5a636e' : '#4a525c'), '#1a1e24');
+    p.shape(x + w / 2 + 2, base - r(22 * g.k), x + w / 2 + r(26 * g.k), base, () => true, (xx, yy) => (Math.abs(xx - (x + w / 2 + r(13 * g.k))) < 2 || yy === base - r(12 * g.k) ? '#7d4a2e' : '#b07a4a'), '#3e2414');
+  };
+  SCENES.glade.fore = (p, g, x, base, s) => {
+    const sz = r(26 * g.k * s);
+    p.shape(x - sz * 0.35, base - sz * 1.4, x + sz * 0.35, base, () => true, (xx) => (xx < x ? '#fffaf0' : '#e8dcc8'), '#8a7a6a');
+    K.dome(p, x, base - sz * 1.3, sz, sz * 0.8, ['#c44a7a', '#e870a0', '#ff9cc4', '#ffd6e8'], '#7a2a4a', { floor: base - sz * 1.12 });
+    for (const [dx, dy] of [[-0.45, -0.45], [0.2, -0.65], [0.5, -0.3]]) p.rect(r(x + dx * sz), r(base - sz * 1.3 + dy * sz * 0.8), 3, 3, '#ffffff');
+  };
 
   wildlifeKey = '';
   drawResidents();

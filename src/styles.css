@@ -207,3 +207,13 @@
 .team-dex{display:flex;flex-wrap:wrap;gap:2px 10px;align-items:baseline;padding:8px 10px;margin-bottom:12px;background:#f3eedb;border:2px solid #e2dbc3}
 .team-dex b{font:9px 'Press Start 2P',monospace;color:#3f4b3c}
 .team-dex span{font:16px VT323,monospace;color:#7c856f}
+/* Pixel-art scenery (04-pixel-world.js): one canvas pixel per art pixel, scaled up crisply. */
+#world{image-rendering:pixelated;width:auto;height:auto}
+.world-tint{background:linear-gradient(180deg,#1323330d,#17243314 58%,#1723331f)}
+/* Battle stage (07-attacks.js): the biome is drawn behind the fight, so the old painted hills go. */
+.attack-stage{background:#172943}
+.attack-stage:after{display:none}
+.attack-stage canvas{width:auto;height:auto;inset:0 auto auto 0}
+#battleBackdrop{transform:translateX(var(--quake,0px))}
+/* Attack effects play over the wild Pokémon (z 1) and under the attacker and target card. */
+#attackCanvas,#attackStage.physical-attack #attackCanvas{z-index:2}

@@ -77,7 +77,9 @@ const UPDATES = [
       'Fixed: the calendar now stays on the picked day after syncing or at midnight.',
       'Attack effects now grow with your lead’s level, not just your starter’s.',
       'Press Escape to close the patch notes.',
-      'Coming next in 2.0: new attack animations for every type.',
+      'All-new pixel art: every biome has been redrawn in the same style as the Pokémon sprites, with outlined, shaded scenery, drifting clouds, and weather like snow, rain, and embers.',
+      'New attack animations for all 18 types, from Razor Leaf and Hydro Pump to Moonblast. Tackles, claws, and bites lunge into the target.',
+      'Battles now take place in your current biome, with a ground pad under each Pokémon.',
     ],
   },
   {
