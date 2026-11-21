@@ -5,8 +5,8 @@
 //   The attack art (07-attacks.js) builds its effect sprites with it too.
 // - SCENES: one entry per biome type. `paint` draws the still landscape once into a cached layer;
 //   `behind` / `front` animate the moving parts (clouds, water, particles) each frame.
-// - drawWorld: paints the current biome (activeBiome) on the background canvas, at 15 fps so the
-//   motion steps like sprite animation. paintScene renders any biome at any size (the battle stage).
+// - drawWorld: paints the current biome (activeBiome) on the background canvas, at 30 fps so the
+//   motion stays crisp and pixel-stepped. paintScene renders any biome at any size (the battle stage).
 // Biome types and wildlife are listed in 02-habitats.js, 09-more-habitats.js and 09b-new-biomes.js.
 
 // Aquatic species swim along the waterline instead of using aerial paths.
@@ -343,7 +343,7 @@ const SceneFx = (() => {
   function makeClouds(g, ramp, { n = 5, y0 = 0.06, y1 = 0.3, size = 1, speed = 2 } = {}) {
     g.clouds = Array.from({ length: n }, (_, i) => {
       const w = r((26 + g.rand() * 40) * g.k * size), h = r(w * (0.3 + g.rand() * 0.12));
-      return { c: PixelKit.cloudSprite(w, h, ramp, i), x: g.rand() * g.W, y: r(g.H * (y0 + g.rand() * (y1 - y0))), v: speed * (0.6 + g.rand() * 0.8) };
+      return { c: PixelKit.cloudSprite(w, h, ramp, i), x: g.rand() * g.W, y: r(g.H * (y0 + g.rand() * (y1 - y0))), v: speed * 3.5 * (0.6 + g.rand() * 0.8) };
     });
   }
   function clouds(ctx, t, g) {
@@ -771,8 +771,8 @@ function paintScene(ctx, type, W, H, t, { stage = false, frontCtx = null } = {})
 let stepResidents = () => {};
 
 (() => {
-  // The scenery and wildlife always move (gently, at 15 fps), as the wildlife always has.
-  const FRAME_MS = 1000 / 15;
+  // The scenery and wildlife always move (at 30 fps), as the wildlife always has.
+  const FRAME_MS = 1000 / 30;
   const front = $('#worldFront'), fctx = front?.getContext('2d');
   let last = 0, shown = '';
   drawWorld = function () {

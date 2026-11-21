@@ -54,7 +54,7 @@
   // Each Pokémon keeps to a part of the scene that suits it, read from the scene itself
   // (04-pixel-world.js): fliers and floaters in open sky, below any cave ceiling and above the tallest
   // trees, pillars and buildings; walkers on the ground, in front of the land but behind the close-up
-  // props; swimmers half under the water. They move with the scenery at 15 fps, on its pixel grid.
+  // props; swimmers half under the water. They move with the scenery at 30 fps, on its pixel grid.
   let roamers = [], lastStep = null;
   const SPRITE_SCALE = 1; // sprites show at their own size, like everywhere else in the app
   drawResidents = function () {
@@ -106,20 +106,20 @@
       let x, y, dir, depth = 0;
       if (m.kind === 'fly') {
         // Across the whole screen and round again, bobbing gently.
-        const span = vw + w * 2, run = PixelKit.wrap(m.a * span + t * 28 * m.speed, span);
+        const span = vw + w * 2, run = PixelKit.wrap(m.a * span + t * 65 * m.speed, span);
         dir = m.dir;
         x = dir > 0 ? run - w : vw + w - run - w;
         y = lerp(skyTop, Math.max(skyTop, skyBottom - h), m.b) + Math.sin(t * 1.6 + m.c * 6) * 3 * P;
       } else if (m.kind === 'float') {
         // Hovering about one spot, drifting slowly.
-        const drift = Math.sin(t * 0.25 * m.speed + m.c * 6);
-        dir = Math.cos(t * 0.25 * m.speed + m.c * 6) > 0 ? 1 : -1;
-        x = m.a * (vw - w) + drift * 40;
+        const drift = Math.sin(t * 0.5 * m.speed + m.c * 6);
+        dir = Math.cos(t * 0.5 * m.speed + m.c * 6) > 0 ? 1 : -1;
+        x = m.a * (vw - w) + drift * 70;
         y = lerp(skyTop, Math.max(skyTop, skyBottom - h), m.b) + Math.sin(t * 1.3 + m.c * 4) * 2 * P;
       } else {
         // Walking or swimming back and forth along a stretch of ground or water.
         const band = m.kind === 'swim' && water ? water : ground, range = Math.min(vw * 0.4, 120 + m.c * 180);
-        const [f, d] = patrol(t * (m.kind === 'swim' ? 12 : 22) * m.speed / range + m.c * 2);
+        const [f, d] = patrol(t * (m.kind === 'swim' ? 24 : 45) * m.speed / range + m.c * 2);
         dir = d;
         x = Math.max(0, Math.min(vw - w, m.a * (vw - w - range) + f * range));
         const feet = lerp(band[0], band[1], m.b);
