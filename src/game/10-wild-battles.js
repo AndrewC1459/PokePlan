@@ -223,6 +223,7 @@
   // One catch: throw, three wobbles, click. `got` is a result from catchWild / catchBonus.
   async function throwBall(got) {
     const species = got.mon.species, name = nameOf(species), kind = got.mon.ball || 'poke', ballName = L.BALLS[kind] || 'Poké Ball';
+    const aBall = (/^[AEIOU]/.test(ballName) ? 'an ' : 'a ') + ballName; // an Ultra Ball, a Great Ball
     // Clear the last attack's sparks so the catch plays on a clean stage.
     actx.setTransform(1, 0, 0, 1, 0, 0);
     actx.clearRect(0, 0, attackCanvas.width, attackCanvas.height);
@@ -231,7 +232,7 @@
     stage.classList.add('wild-battle', 'catching');
     $('#attackName').textContent = ballName.toUpperCase() + '!';
     $('#attackCounter').textContent = got.number ? `BONUS ${got.number}` : '◓';
-    $('#attackCaption').textContent = `You threw a ${ballName}!`;
+    $('#attackCaption').textContent = `You threw ${aBall}!`;
     wild.src = wildSprite(species);
     wild.hidden = false;
     wild.className = 'wild-mon';
@@ -276,7 +277,7 @@
     catchCards.push(() => showAccountDialog({
       title: `${got.number ? 'Bonus! ' : ''}${name} joined your team!`,
       message: `Lv. ${level} · ${typesOf(species)}. ${where}`,
-      content: `<div class="catch-card"><img src="${wildSprite(species)}" alt=""><p>${escapeHtml(got.mon.note)}<br><span class="catch-ball-note"><img src="${ballFrame(kind)}" alt=""> Caught with a ${escapeHtml(ballName)}</span></p></div>`,
+      content: `<div class="catch-card"><img src="${wildSprite(species)}" alt=""><p>${escapeHtml(got.mon.note)}<br><span class="catch-ball-note"><img src="${ballFrame(kind)}" alt=""> Caught with ${escapeHtml(aBall)}</span></p></div>`,
       actions: [{ label: 'AWESOME', run: closeAccountDialog }],
     }));
   }

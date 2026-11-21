@@ -75,6 +75,7 @@ const UPDATES = [
       'Fixed: opening Poképlan with no connection now shows your saved quests instead of the log-in screen.',
       'Fixed: a starter evolution and a catch card no longer open on top of each other.',
       'Fixed: the calendar now stays on the picked day after syncing or at midnight.',
+      'Fixed: catch messages now say “an Ultra Ball” instead of “a Ultra Ball”.',
       'Attack effects now grow with your lead’s level, not just your starter’s.',
       'Press Escape to close the patch notes.',
       'All-new pixel art: every biome has been redrawn in the same style as the Pokémon sprites, with outlined, shaded scenery, drifting clouds, and weather like snow, rain, and embers.',
