@@ -50,15 +50,21 @@
     for (const [biome, list] of Object.entries(biomes)) habitatWildlife[starter][biome].push(...list);
   for (const id of [195, 270, 339, 550, 90, 116, 120, 222, 318]) waterSpeciesIds.add(id);
 
-  // ---- More residents on screen (fewer on phones so the board stays readable) ----
-  const waterBiomes = new Set(['river', 'marsh', 'beach']);
+  // ---- Wildlife roaming the scene (fewer on phones so the board stays readable) ----
+  // Each Pokémon keeps to a part of the scene that suits it, read from the scene itself
+  // (04-pixel-world.js): fliers and floaters in open sky, below any cave ceiling and above the tallest
+  // trees, pillars and buildings; walkers on the ground, in front of the land but behind the close-up
+  // props; swimmers half under the water. They move with the scenery at 15 fps, on its pixel grid.
+  let roamers = [], lastStep = null;
+  const SPRITE_SCALE = 1; // sprites show at their own size, like everywhere else in the app
   drawResidents = function () {
     const biome = activeBiome?.type || 'meadow', key = pokemon + ':' + biome;
     if (wildlifeKey === key) return;
     wildlifeKey = key;
     ambientLayer.replaceChildren();
+    roamers = [];
     const count = window.innerWidth < 700 ? 5 : 8;
-    const water = waterBiomes.has(biome);
+    const water = Boolean(sceneLayers(biome, world.width, world.height).g.water);
     const candidates = (habitatWildlife[pokemon]?.[biome] || [])
       .map(([id, kind]) => [id, kind === S || (water && waterSpeciesIds.has(id)) ? (water ? S : FL) : kind])
       .filter(([, kind]) => kind !== 'perch');
@@ -67,21 +73,67 @@
       ? [[218, W], ...shuffled.filter(([id]) => id !== 218).slice(0, count - 1)]
       : shuffled.slice(0, count);
     pool.forEach(([id, kind], i) => {
-      const wrap = document.createElement('div'), img = document.createElement('img');
-      wrap.className = 'resident-wrap ' + kind + (i % 2 ? ' from-right' : '');
-      wrap.style.setProperty('--lane', kind === S ? `${74 + (i % 3) * 5}%` : kind === W ? `${5 + (i % 3) * 2}%` : `${8 + (i % 5) * 8}%`);
-      wrap.style.setProperty('--ground', `${3 + (i % 3) * 2}%`);
-      const duration = kind === W ? 12 + i * 1.1 : kind === S ? 22 + i * 2 : 19 + i * 2.1;
-      wrap.style.setProperty('--delay', `${-Math.random() * duration}s`);
-      wrap.style.setProperty('--speed', `${duration}s`);
-      img.className = 'resident';
+      const el = document.createElement('div'), img = document.createElement('img');
+      el.className = 'roamer ' + kind;
       img.alt = '';
       img.draggable = false;
       img.src = `/sprites/wildlife/${id}.gif`;
-      img.addEventListener('error', () => wrap.remove());
-      wrap.appendChild(img);
-      ambientLayer.appendChild(wrap);
+      img.addEventListener('error', () => { el.remove(); roamers = roamers.filter(m => m.el !== el); });
+      img.addEventListener('load', () => { el.style.visibility = ''; if (lastStep) stepResidents(...lastStep); });
+      el.style.visibility = 'hidden';
+      el.appendChild(img);
+      ambientLayer.appendChild(el);
+      // Stable random values per Pokémon: where it starts, which lane, how fast, which way.
+      roamers.push({ el, img, kind, a: Math.random(), b: (i + Math.random()) / pool.length, c: Math.random(), speed: 0.7 + Math.random() * 0.6, dir: i % 2 ? -1 : 1 });
     });
+  };
+
+  const lerp = (a, b, f) => a + (b - a) * f;
+  // Back and forth: 0 → 1 → 0 over one period, with the direction of travel.
+  const patrol = v => { const ph = PixelKit.wrap(v, 2); return ph < 1 ? [ph, 1] : [2 - ph, -1]; };
+
+  stepResidents = function (t, g, P) {
+    lastStep = [t, g, P];
+    const snap = v => Math.round(v / P) * P, vw = g.W * P;
+    // Open sky (CSS px): below the ceiling and the top edge, above the tallest standing prop.
+    const skyTop = Math.max(g.ceiling + 4, g.H * 0.04) * P, skyBottom = Math.min(g.reach - 4, g.hz - 8) * P;
+    // Ground: the lower part of the land, where the Pokémon are seen walking toward the viewer.
+    const ground = [lerp(g.hz, g.H, 0.45) * P, (g.H - 3) * P];
+    const water = g.water ? [lerp(g.water[0], g.water[1], 0.35) * P, (g.water[1] - 2) * P] : null;
+    for (const m of roamers) {
+      const w = m.img.naturalWidth * SPRITE_SCALE, h = m.img.naturalHeight * SPRITE_SCALE;
+      if (!w) continue;
+      let x, y, dir, depth = 0;
+      if (m.kind === 'fly') {
+        // Across the whole screen and round again, bobbing gently.
+        const span = vw + w * 2, run = PixelKit.wrap(m.a * span + t * 28 * m.speed, span);
+        dir = m.dir;
+        x = dir > 0 ? run - w : vw + w - run - w;
+        y = lerp(skyTop, Math.max(skyTop, skyBottom - h), m.b) + Math.sin(t * 1.6 + m.c * 6) * 3 * P;
+      } else if (m.kind === 'float') {
+        // Hovering about one spot, drifting slowly.
+        const drift = Math.sin(t * 0.25 * m.speed + m.c * 6);
+        dir = Math.cos(t * 0.25 * m.speed + m.c * 6) > 0 ? 1 : -1;
+        x = m.a * (vw - w) + drift * 40;
+        y = lerp(skyTop, Math.max(skyTop, skyBottom - h), m.b) + Math.sin(t * 1.3 + m.c * 4) * 2 * P;
+      } else {
+        // Walking or swimming back and forth along a stretch of ground or water.
+        const band = m.kind === 'swim' && water ? water : ground, range = Math.min(vw * 0.4, 120 + m.c * 180);
+        const [f, d] = patrol(t * (m.kind === 'swim' ? 12 : 22) * m.speed / range + m.c * 2);
+        dir = d;
+        x = Math.max(0, Math.min(vw - w, m.a * (vw - w - range) + f * range));
+        const feet = lerp(band[0], band[1], m.b);
+        // Swimmers sit low in the water; walkers step (a one-pixel bob, like the sprites' own frames).
+        const shown = m.kind === 'swim' ? Math.round(h * 0.62) : h;
+        y = feet - shown - (m.kind === 'walk' && Math.floor(t * 6 + m.c * 4) % 2 ? P : 0);
+        m.el.style.height = m.kind === 'swim' ? shown + 'px' : '';
+        depth = Math.round(feet);
+      }
+      m.el.style.transform = `translate(${snap(x)}px, ${snap(y)}px)`;
+      m.el.style.zIndex = String(depth);
+      // The sprites face left; flip them to walk or fly right.
+      m.img.style.transform = dir > 0 ? 'scaleX(-1)' : '';
+    }
   };
 
   // ---- Scenery for these habitats (pixel scenes, see 04-pixel-world.js) ----
@@ -98,6 +150,7 @@
       // Sea to the horizon, a wet shoreline, then sand.
       const sea = g.hz - r(26 * g.k), shore = g.hz + r((g.H - g.hz) * 0.18);
       g.sea = [sea, shore];
+      g.water = [sea + 6, shore];
       p.rect(0, sea, g.W, shore - sea, '#3c8fc8');
       p.rect(0, sea, g.W, 1, '#2a6a9c');
       for (let y = sea + 1; y < shore; y++) {
@@ -124,6 +177,7 @@
         for (let i = 0; i < 6; i++) segs.push([x + (lean * i) / 6, base - (h * i) / 6, x + (lean * (i + 1)) / 6, base - (h * (i + 1)) / 6]);
         K.strokes(p, segs, Math.max(3, h * 0.11), (xx, yy) => (((base - yy) / (h / 9)) % 1 < 0.3 ? '#7a5634' : xx < x + lean * ((base - yy) / h) ? '#b88a58' : '#9a6e44'), '#4a321e');
         const tx = x + lean, ty = base - h;
+        p.tall(ty - h * 0.3);
         for (const [dx, dy] of [[-1, 0.3], [1, 0.35], [-0.7, -0.4], [0.75, -0.35], [0.1, -0.6]]) {
           const fr = [], len = h * 0.55;
           for (let i = 0; i < 5; i++) {
@@ -175,6 +229,7 @@
         const f = s / 20, x = poles[i] + (poles[i + 1] - poles[i]) * f;
         p.set(r(x), r(top + 3 + Math.sin(f * Math.PI) * 8 * g.k), '#111620');
       }
+      p.tall(top);
       for (const x of poles) {
         p.shape(x - 1, top, x + 2, g.hz + 3, () => true, (xx) => (xx === x - 1 ? '#5a4632' : '#3e2f22'), '#161009');
         p.shape(x - r(8 * g.k), top + 2, x + r(8 * g.k), top + 4, () => true, '#3e2f22', '#161009');
@@ -213,6 +268,7 @@
       g.dunes = dunes;
       for (let i = 0; i < g.W * g.H * 0.002; i++) { const x = r(g.rand() * g.W), y = dunes[Math.min(g.W - 1, x)] + 4 + r(g.rand() * 80); p.rect(x, y, 2, 1, '#d29a5a'); }
       const cactus = (x, base, h) => {
+        p.tall(base - h);
         const w = Math.max(3, r(h * 0.22)), ramp = (xx, cx) => (xx < cx - w / 4 ? '#7ab55c' : xx > cx + w / 4 ? '#3f7a3c' : '#5a9a48');
         p.shape(x - w / 2, base - h, x + w / 2, base, (xx, yy) => yy > base - h + 1 || Math.abs(xx + 0.5 - x) < w / 2 - 1, xx => ramp(xx, x), '#1f4424');
         for (const s of [-1, 1]) {
@@ -243,7 +299,7 @@
       const wall = (fromLeft) => {
         const w = r(Math.max(g.W * 0.22, 80 * g.k)), top = r(g.H * 0.12);
         const edge = y => w * (0.55 + 0.45 * Math.min(1, (y - top) / (g.hz - top))) + Math.sin(y * 0.2) * 3 + (K.hash(1, y >> 3) - 0.5) * 6;
-        p.shape(fromLeft ? 0 : g.W - w - 10, top, fromLeft ? w + 10 : g.W, g.H, (x, y) => (fromLeft ? x < edge(y) : x >= g.W - edge(y)), (x, y) => {
+        g.front.shape(fromLeft ? 0 : g.W - w - 10, top, fromLeft ? w + 10 : g.W, g.H, (x, y) => (fromLeft ? x < edge(y) : x >= g.W - edge(y)), (x, y) => {
           const d = fromLeft ? edge(y) - x : x - (g.W - edge(y));
           if (d < 3) return fromLeft ? '#7a3a2a' : '#e8a070';
           return strata[Math.floor((y + Math.sin(x * 0.05) * 3) / (9 * g.k)) % strata.length];
@@ -307,7 +363,9 @@
     paint(p, g) {
       for (let x = -6; x < g.W + 6; x += r((16 + g.rand() * 18) * g.k)) {
         const h = r((12 + g.rand() * 30) * g.k), w = r((6 + g.rand() * 5) * g.k);
-        K.poly(p, [[x - w, -1], [x + w, -1], [x, h]], (xx) => (xx < x ? '#4a3a72' : '#35285a'), '#0e0a18');
+        p.rect(x - w, 0, w * 2, 3, '#211836');
+        K.poly(g.front, [[x - w, -1], [x + w, -1], [x, h]], (xx) => (xx < x ? '#4a3a72' : '#35285a'), '#0e0a18');
+        g.ceiling = Math.max(g.ceiling, h);
       }
       K.range(p, g.rand, { y: g.hz + 4, height: 50 * g.k, width: 70 * g.k, ramp: ['#0e0a18', '#251c40', '#2e2350', '#3a2c62', '#4c3c7a'] });
       K.ground(p, g.rand, g.hz + 4, ['#0e0a18', '#211836', '#2a2044', '#3a2e5a'], { tufts: 0.004, pebble: true });

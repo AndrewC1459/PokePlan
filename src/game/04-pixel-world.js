@@ -59,7 +59,9 @@ const PixelKit = (() => {
       this.h = h;
       this.img = new ImageData(Math.max(1, w), Math.max(1, h));
       this.d = new Uint32Array(this.img.data.buffer);
+      this.reach = h; // top of the tallest standing prop (trees, pillars, ...), so flying wildlife stays above it
     }
+    tall(y) { if (y < this.reach) this.reach = Math.round(y); }
     set(x, y, c) {
       if (x >= 0 && y >= 0 && x < this.w && y < this.h) this.d[y * this.w + x] = pixel(c);
     }
@@ -232,6 +234,7 @@ const PixelKit = (() => {
     const tx = Math.round(x - tw / 2);
     p.shape(tx, base - th - r * 0.5, tx + tw, base, () => true, xx => (xx < tx + tw / 2 ? trunk[2] : trunk[1]), trunk[0]);
     const cy = base - th - r * 0.75;
+    p.tall(cy - r * 1.2);
     blob(p, [
       { x, y: cy, r }, { x: x - r * 0.72, y: cy + r * 0.32, r: r * 0.66 }, { x: x + r * 0.72, y: cy + r * 0.28, r: r * 0.7 },
       { x: x - r * 0.25, y: cy - r * 0.62, r: r * 0.6 }, { x: x + r * 0.36, y: cy - r * 0.45, r: r * 0.55 },
@@ -242,6 +245,7 @@ const PixelKit = (() => {
     const tw = Math.max(2, Math.round(h * 0.09));
     p.shape(x - tw / 2, base - h * 0.2, x + tw / 2, base, () => true, trunk[1], trunk[0]);
     const tiers = h > 24 ? 4 : 3, top = base - h, tierH = (h * 0.85) / tiers;
+    p.tall(top);
     const spans = Array.from({ length: tiers }, (_, i) => {
       const ay = top + i * tierH * 0.72, by = ay + tierH * 1.25;
       return { ay, by, hw: h * (0.17 + i * 0.07) };
@@ -268,6 +272,7 @@ const PixelKit = (() => {
   }
 
   function deadTree(p, x, base, h, ramp) {
+    p.tall(base - h * 0.98);
     const s = h / 40;
     strokes(p, [
       [x, base, x - 1 * s, base - h * 0.62],
@@ -280,6 +285,7 @@ const PixelKit = (() => {
   }
 
   function crystal(p, x, base, h, ramp) {
+    p.tall(base - h);
     const w = Math.max(3, h * 0.32);
     poly(p, [[x - w / 2, base], [x - w / 2, base - h * 0.7], [x, base - h], [x + w / 2, base - h * 0.7], [x + w / 2, base]], (xx, yy) => {
       if (Math.abs(xx + 0.5 - x) < 1 && yy < base - 2) return ramp[4];
@@ -297,6 +303,7 @@ const PixelKit = (() => {
 
   function pillar(p, x, base, w, h, ramp, broken = 0) {
     const top = base - h;
+    p.tall(top - 3);
     p.shape(x - w / 2, top, x + w / 2, base, (xx, yy) => yy >= top + (broken ? hash(xx, 3) * broken : 0),
       (xx, yy) => {
         const f = (xx + 0.5 - (x - w / 2)) / w;
@@ -560,9 +567,12 @@ const PAL = {
     paint(p, g) {
       // Back wall texture, stalactites, a glowing pool and crystals.
       for (let i = 0; i < g.W * g.H * 0.004; i++) { const x = r(g.rand() * g.W), y = r(g.rand() * g.hz); p.rect(x, y, 3, 1, '#3d3250'); p.set(x, y + 1, '#171221'); }
+      // The ceiling hangs in front of the wildlife, which flies below its lowest point.
       for (let x = -6; x < g.W + 6; x += r((14 + g.rand() * 18) * g.k)) {
         const h = r((14 + g.rand() * 34) * g.k), w = r((6 + g.rand() * 6) * g.k);
-        K.poly(p, [[x - w, -1], [x + w, -1], [x + 1, h]], (xx) => (xx < x ? '#5c4f72' : '#463b5a'), '#140f1d');
+        p.rect(x - w, 0, w * 2, 3, '#2a2238');
+        K.poly(g.front, [[x - w, -1], [x + w, -1], [x + 1, h]], (xx) => (xx < x ? '#5c4f72' : '#463b5a'), '#140f1d');
+        g.ceiling = Math.max(g.ceiling, h);
       }
       K.range(p, g.rand, { y: g.hz + 4, height: 44 * g.k, width: 60 * g.k, ramp: ['#140f1d', '#2e2640', '#3b3150', '#4b3f62', '#64567e'] });
       K.ground(p, g.rand, g.hz + 4, ['#140f1d', '#2a2238', '#382e48', '#4a3e5c'], { tufts: 0.004, pebble: true });
@@ -708,6 +718,13 @@ const PAL = {
 })();
 
 // ---- Rendering ---------------------------------------------------------------------------------
+// Each scene has three cached layers:
+//   sky   – sky, sun or moon, stars;
+//   land  – everything the wildlife walks and flies in front of;
+//   front – what stands between the viewer and the wildlife: the close-up props at the bottom edge,
+//           cave ceilings, canyon walls. Wildlife (09-more-habitats.js) roams between land and front.
+// Scenes also report where wildlife can go: g.ceiling (lowest point of a ceiling), g.reach (top of
+// the tallest tree, pillar or building on the land), g.water ([top, bottom] of swimmable water).
 const sceneCache = new Map();
 // stage: the battle backdrop, which leaves out the close-up props so nothing hides the Pokémon.
 function sceneLayers(type, W, H, stage = false) {
@@ -715,34 +732,47 @@ function sceneLayers(type, W, H, stage = false) {
   let sc = sceneCache.get(key);
   if (sc) return sc;
   const def = SCENES[type] || SCENES.meadow;
-  const g = { W, H, hz: Math.round(H * 0.56), k: Math.max(0.5, Math.min(1.7, H / 300, W / 200)), rand: PixelKit.rng(type) };
+  const g = { W, H, hz: Math.round(H * 0.56), k: Math.max(0.5, Math.min(1.7, H / 300, W / 200)), rand: PixelKit.rng(type), ceiling: 0 };
   const sky = new PixelKit.Pix(W, H);
   PixelKit.sky(sky, def.sky, Math.round(H * 0.62));
   def.paintSky?.(sky, g);
-  const land = new PixelKit.Pix(W, H);
+  const land = new PixelKit.Pix(W, H), front = new PixelKit.Pix(W, H);
+  g.front = front;
   def.paint(land, g);
-  if (def.fore && !stage) SceneFx.framing(g, (x, base, s, i) => def.fore(land, g, x, base, s, i));
-  sc = { def, g, sky: sky.canvas(), land: land.canvas() };
-  sceneCache.set(key, sc);
+  g.reach = land.reach;
+  if (def.fore && !stage) SceneFx.framing(g, (x, base, s, i) => def.fore(front, g, x, base, s, i));
+  delete g.front;
+  sc = { def, g, sky: sky.canvas(), land: land.canvas(), front: front.canvas() };
+  // A scene registered by a later script isn't cached under the meadow stand-in.
+  if (SCENES[type]) sceneCache.set(key, sc);
   // Keep a few (the background and the battle stage), dropping the oldest.
   if (sceneCache.size > 4) sceneCache.delete(sceneCache.keys().next().value);
   return sc;
 }
 
-function paintScene(ctx, type, W, H, t, { stage = false } = {}) {
-  const { def, g, sky, land } = sceneLayers(type, W, H, stage);
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.imageSmoothingEnabled = false;
+// Paints a scene. With frontCtx, the front layer and the weather go on that canvas instead (so
+// wildlife can roam between the two); otherwise everything goes on ctx. Returns the scene's g.
+function paintScene(ctx, type, W, H, t, { stage = false, frontCtx = null } = {}) {
+  const { def, g, sky, land, front } = sceneLayers(type, W, H, stage);
+  const f = frontCtx || ctx;
+  for (const c of new Set([ctx, f])) { c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.imageSmoothingEnabled = false; }
   ctx.drawImage(sky, 0, 0);
   def.behind?.(ctx, t, g);
   ctx.drawImage(land, 0, 0);
-  def.front?.(ctx, t, g);
-  ctx.restore();
+  if (frontCtx) frontCtx.clearRect(0, 0, W, H);
+  f.drawImage(front, 0, 0);
+  def.front?.(f, t, g);
+  for (const c of new Set([ctx, f])) c.restore();
+  return g;
 }
+
+// Wildlife hooks: 09-more-habitats.js assigns the real one. Called every scenery frame with the
+// time, the scene's g and the size of one art pixel in CSS pixels.
+let stepResidents = () => {};
 
 (() => {
   const FRAME_MS = 1000 / 15, still = matchMedia('(prefers-reduced-motion: reduce)');
+  const front = $('#worldFront'), fctx = front?.getContext('2d');
   let last = 0, shown = '';
   drawWorld = function () {
     const now = performance.now(), type = activeBiome?.type || 'meadow', key = `${type}:${world.width}x${world.height}`;
@@ -750,6 +780,14 @@ function paintScene(ctx, type, W, H, t, { stage = false } = {}) {
     if (key === shown && (still.matches || now - last < FRAME_MS)) return;
     last = now;
     shown = key;
-    paintScene(wctx, type, world.width, world.height, still.matches ? 0 : now / 1000);
+    if (front && (front.width !== world.width || front.height !== world.height)) {
+      front.width = world.width;
+      front.height = world.height;
+      front.style.width = world.style.width;
+      front.style.height = world.style.height;
+    }
+    const t = still.matches ? 0 : now / 1000;
+    const g = paintScene(wctx, type, world.width, world.height, t, { frontCtx: fctx });
+    stepResidents(t, g, worldPixel);
   };
 })();

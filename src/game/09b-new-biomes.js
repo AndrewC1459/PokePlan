@@ -62,6 +62,7 @@
       // The dojo: plaster walls with timber frames, a two-tier roof with upturned eaves, and steps.
       const dx = r(g.W * 0.66), base = g.hz + r(10 * g.k), w = r(64 * g.k), wh = r(26 * g.k);
       g.dojo = [dx, base, w];
+      p.tall(base - wh - r(40 * g.k));
       p.shape(dx - w, base - wh, dx + w, base, () => true, (x, y) => {
         const i = Math.floor((x - (dx - w)) / (16 * g.k));
         if (Math.abs(x - (dx - w + i * 16 * g.k)) < 1.5 || y === base - wh + r(10 * g.k)) return '#6a3e24';
@@ -106,6 +107,7 @@
       g.stacks = [];
       for (let x = r(-g.rand() * 40); x < g.W; x += r((80 + g.rand() * 60) * g.k)) {
         const w = r((50 + g.rand() * 40) * g.k), h = r((30 + g.rand() * 40) * g.k), top = g.hz - h;
+        p.tall(top);
         p.shape(x, top, x + w, g.hz + 2, (xx, yy) => yy >= top + (((xx - x) % r(14 * g.k)) * 0.6), (xx, yy) => (yy < top + 10 * g.k && ((xx - x) % r(14 * g.k)) < 3 ? '#7a828e' : '#4c535e'), '#22262e');
         for (let wy = top + r(14 * g.k); wy < g.hz - 6; wy += r(10 * g.k)) for (let wx = x + 4; wx < x + w - 6; wx += r(9 * g.k)) {
           p.shape(wx, wy, wx + r(5 * g.k), wy + r(4 * g.k), () => true, K.hash(wx, wy) > 0.35 ? '#ffd86a' : '#2e3440', '#22262e');
@@ -118,6 +120,7 @@
             return xx < sx + sw / 3 ? '#5e6672' : '#434a55';
           }, '#1e2228');
           g.stacks.push([sx + sw / 2, g.hz - sh]);
+          p.tall(g.hz - sh);
         }
       }
       // Steel girders and a hazard-striped walkway.
@@ -173,6 +176,7 @@
         K.dome(p, x, base - s * 1.2, s, s * 0.8, ramp.slice(1), ramp[0], { floor: base - s * 1.05 });
         for (const [dx, dy] of [[-0.45, -0.45], [0.2, -0.65], [0.5, -0.3]]) p.rect(r(x + dx * s), r(base - s * 1.2 + dy * s * 0.8), 2, 2, '#ffffff');
         g.caps.push([x, base - s * 1.2, s]);
+        p.tall(base - s * 2);
       }
       const petals = ['#ff9ec8', '#fff1a0', '#a8d4ff', '#ffffff', '#d6b0ff'];
       for (let i = 0; i < g.W * (g.H - g.hz) * 0.003; i++) {

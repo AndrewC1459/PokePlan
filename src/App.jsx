@@ -80,6 +80,7 @@ const UPDATES = [
       'All-new pixel art: every biome has been redrawn in the same style as the Pokémon sprites, with outlined, shaded scenery, drifting clouds, and weather like snow, rain, and embers.',
       'New attack animations for all 18 types, from Razor Leaf and Hydro Pump to Moonblast. Tackles, claws, and bites lunge into the target.',
       'Battles now take place in your current biome, with a ground pad under each Pokémon.',
+      'Wild Pokémon fit into the scenery: fliers keep to open sky above trees and pillars and below cave ceilings, walkers pass behind close-up rocks and bushes, and swimmers stay in the water.',
     ],
   },
   {
@@ -209,6 +210,8 @@ export default function App() {
       <AttackOverlay />
       {/* Wildlife sprites roam here (filled by the habitat scripts). */}
       <div id="ambientLayer" aria-hidden="true" />
+      {/* Scenery that stands in front of the wildlife: close-up props, cave ceilings, weather. */}
+      <canvas id="worldFront" aria-hidden="true" />
     </>
   );
 }

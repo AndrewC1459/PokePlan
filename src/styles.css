@@ -217,3 +217,9 @@
 #battleBackdrop{transform:translateX(var(--quake,0px))}
 /* Attack effects play over the wild Pokémon (z 1) and under the attacker and target card. */
 #attackCanvas,#attackStage.physical-attack #attackCanvas{z-index:2}
+/* Scenery in front of the wildlife (04-pixel-world.js): close-up props, cave ceilings, weather. */
+#worldFront{position:fixed;left:0;top:0;z-index:3;pointer-events:none;image-rendering:pixelated}
+/* Roaming wildlife (09-more-habitats.js) is placed by script each scenery frame. */
+.roamer{position:absolute;left:0;top:0;overflow:hidden;will-change:transform}
+.roamer img{display:block;image-rendering:pixelated;filter:drop-shadow(0 2px 0 #1a283b55)}
+.roamer.swim img{filter:none}
